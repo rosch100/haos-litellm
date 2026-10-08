@@ -20,6 +20,7 @@ class RepositoryContractTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/build.yaml").read_text()
         self.assertIn("image: ghcr.io/rosch100/haos-litellm-litellm", manifest)
         self.assertIn("FROM ghcr.io/home-assistant/base:latest", dockerfile)
+        self.assertIn("ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile)
         self.assertIn('ENV IMAGE="ghcr.io/rosch100/haos-litellm-litellm:${BUILD_VERSION}"', dockerfile)
         self.assertIn("platforms: linux/arm64", workflow)
         self.assertFalse((APP / "build.yaml").exists())

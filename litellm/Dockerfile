@@ -13,6 +13,7 @@ RUN apk add --no-cache python3 py3-pip py3-yaml py3-cryptography git nodejs npm 
 
 RUN python3 -m venv /opt/litellm-venv && \
     /opt/litellm-venv/bin/pip install --no-cache-dir maturin==1.15.0 PyYAML && \
+    ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin && \
     git clone https://github.com/rosch100/litellm.git /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
     /opt/litellm-venv/bin/pip install --no-cache-dir "/tmp/litellm-source[proxy,extra_proxy]" && \
