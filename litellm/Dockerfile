@@ -21,15 +21,19 @@ RUN python3 -m venv /opt/litellm-venv && \
 ENV PATH="/opt/litellm-venv/bin:${PATH}" \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary
 
+COPY run.py /run.py
 COPY run.sh /run.sh
-RUN chmod 0755 /run.sh
+RUN chmod 0755 /run.sh /run.py
+
+ENV IMAGE="ghcr.io/rosch100/haos-litellm-litellm:${BUILD_VERSION}"
 
 LABEL \
     io.hass.name="LiteLLM" \
     io.hass.description="LiteLLM AI Gateway" \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.type="app" \
-    io.hass.arch="${BUILD_ARCH}"
+    io.hass.arch="${BUILD_ARCH}" \
+    io.hass.url="https://github.com/rosch100/haos-litellm"
 
 EXPOSE 4000/tcp
 

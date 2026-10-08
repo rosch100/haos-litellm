@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import socket
 import sys
 from importlib.metadata import version
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import litellm
 import yaml
+from litellm.proxy.db.prisma_client import should_update_prisma_schema
 
 EXPECTED_LITELLM_VERSION = "1.105.0"
 EXPECTED_SCHEMA_SHA256 = "2f2c5a491170f1387e4bdda2921599c0991859ba8154b0d587e9521dbf8277f3"
@@ -49,12 +53,12 @@ def validate_database_url(database_url: str) -> tuple[str, int]:
 
 
 def verify_runtime_schema() -> None:
-    import litellm
-    from litellm.proxy.db.prisma_client import should_update_prisma_schema
-
-    if should_update_prisma_schema(False):
-        fail("LiteLLM would enable schema writes with the configured shared-database startup flag")
-    if should_update_prisma_schema(True):
+    if (
+        should_update_prisma_schema(False)
+        or not should_update_prisma_schema(True)
+        or should_update_prisma_schema("false")
+        or should_update_prisma_schema()
+    ):
         fail("LiteLLM schema update guard failed its runtime safety assertion")
 
     actual_version = version("litellm")
@@ -69,29 +73,28 @@ def verify_runtime_schema() -> None:
         fail("LiteLLM Prisma schema differs from the production schema; refusing shared database access")
 
 
-def load_litellm_config(options: dict[str, object]) -> tuple[dict[str, object], Path]:
-    import os
-
+def load_litellm_config(options: dict[str, object]) -> Path:
     config_path = Path(str(options.get("config_file", "/config/litellm.yaml"))).resolve()
     try:
         config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         fail(f"Unable to load LiteLLM config file: {exc}")
-    if not isinstance(config, dict) or not isinstance(config.get("model_list"), list) or not config["model_list"]:
-        fail("The existing LiteLLM model_list must be present in the app config file")
+    if not isinstance(config, dict):
+        fail("LiteLLM config must be a YAML mapping")
+    router = config.get("router_settings")
+    if not isinstance(router, dict) or not isinstance(router.get("model_group_alias"), dict):
+        fail("LiteLLM router_settings.model_group_alias must be present in the app config")
     general = config.setdefault("general_settings", {})
     if not isinstance(general, dict):
         fail("LiteLLM general_settings must be a YAML mapping")
     general["master_key"] = "os.environ/LITELLM_MASTER_KEY"
     general.pop("database_url", None)
     if general.get("disable_prisma_schema_update") is True:
-        fail(
-            "LiteLLM 1.105.0 uses disable_prisma_schema_update=true to select database setup; "
-            "refusing shared production database startup"
-        )
+        fail("disable_prisma_schema_update=true conflicts with the pinned environment schema guard")
     general.pop("disable_prisma_schema_update", None)
-    os.environ["DISABLE_SCHEMA_UPDATE"] = "true"
-    os.environ["DATABASE_URL"] = required_secret(options, "database_url")
+    if general.get("store_model_in_db") is False:
+        fail("store_model_in_db=false conflicts with the production database-backed model configuration")
+    general["store_model_in_db"] = True
 
     runtime_dir = Path("/tmp/litellm-haos")
     runtime_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -99,12 +102,10 @@ def load_litellm_config(options: dict[str, object]) -> tuple[dict[str, object], 
     runtime_config.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
     runtime_config.chmod(0o600)
     os.chmod(runtime_dir, 0o700)
-    return config, runtime_config
+    return runtime_config
 
 
 def wait_for_database(host: str, port: int) -> None:
-    import socket
-
     try:
         with socket.create_connection((host, port), timeout=5):
             return
@@ -117,8 +118,6 @@ def wait_for_database(host: str, port: int) -> None:
 
 
 def main() -> None:
-    import os
-
     try:
         options = json.loads(OPTIONS_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -128,14 +127,16 @@ def main() -> None:
 
     database_url = required_secret(options, "database_url")
     master_key = required_secret(options, "master_key")
+    os.environ["DISABLE_SCHEMA_UPDATE"] = "true"
     verify_runtime_schema()
     database_host, database_port = validate_database_url(database_url)
-    config, runtime_config = load_litellm_config(options)
+    runtime_config = load_litellm_config(options)
 
     environment = os.environ.copy()
     environment["DATABASE_URL"] = database_url
     environment["LITELLM_MASTER_KEY"] = master_key
     environment["DISABLE_ADMIN_UI"] = "true"
+    environment["STORE_MODEL_IN_DB"] = "true"
 
     salt_key = options.get("salt_key")
     if salt_key:
@@ -144,13 +145,12 @@ def main() -> None:
         environment["LITELLM_SALT_KEY"] = salt_key
 
     for option_name, environment_name in EXPECTED_PROVIDER_ENVIRONMENT.items():
-        value = required_secret(options, option_name)
-        environment[environment_name] = value
+        environment[environment_name] = required_secret(options, option_name)
 
     wait_for_database(database_host, database_port)
     print(
         f"[LiteLLM HA app] Starting LiteLLM {EXPECTED_LITELLM_VERSION} against "
-        f"{database_host}:{database_port}/litellm; schema writes disabled and Admin UI disabled",
+        f"{database_host}:{database_port}/litellm; schema migrations disabled and Admin UI disabled",
         flush=True,
     )
     os.execvpe(

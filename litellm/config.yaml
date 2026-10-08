@@ -1,8 +1,9 @@
 name: LiteLLM
-version: "1.0.0"
+version: "1.0.1"
 slug: litellm
 description: LiteLLM AI Gateway using the shared production PostgreSQL database
 url: https://github.com/rosch100/haos-litellm
+image: ghcr.io/rosch100/haos-litellm-litellm
 arch:
   - aarch64
 init: false
