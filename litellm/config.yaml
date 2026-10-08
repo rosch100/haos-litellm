@@ -1,0 +1,38 @@
+name: LiteLLM
+version: "1.0.0"
+slug: litellm
+description: LiteLLM AI Gateway using the shared production PostgreSQL database
+url: https://github.com/rosch100/haos-litellm
+arch:
+  - aarch64
+init: false
+startup: services
+boot: auto
+watchdog: http://[HOST]:4000/health/liveliness
+ports:
+  4000/tcp: null
+ports_description:
+  4000/tcp: Internal LiteLLM API; leave unpublished and use the Home Assistant NGINX proxy
+options:
+  database_url: null
+  master_key: null
+  salt_key: null
+  config_file: /config/litellm.yaml
+  altanis_ai_azure_api_key: null
+  altanis_ai_deepseek_api_key: null
+  altanis_ai_openai_api_key: null
+  altanis_ai_openrouter_api_key: null
+  instanz2_azure_api_key: null
+schema:
+  database_url: password
+  master_key: password
+  salt_key: password?
+  config_file: str
+  altanis_ai_azure_api_key: password
+  altanis_ai_deepseek_api_key: password
+  altanis_ai_openai_api_key: password
+  altanis_ai_openrouter_api_key: password
+  instanz2_azure_api_key: password
+map:
+  - type: addon_config
+    read_only: true
