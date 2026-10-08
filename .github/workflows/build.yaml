@@ -63,6 +63,9 @@ jobs:
           context: ./litellm
           platforms: linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/rosch100/haos-litellm-litellm:1.0.1
+            ghcr.io/rosch100/haos-litellm-litellm:latest
           build-args: |
             BUILD_VERSION=1.0.1
             BUILD_ARCH=aarch64
