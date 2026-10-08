@@ -37,4 +37,7 @@ LABEL \
 
 EXPOSE 4000/tcp
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD ["/opt/litellm-venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+
 CMD ["/run.sh"]

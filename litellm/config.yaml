@@ -8,8 +8,6 @@ arch:
   - aarch64
 init: false
 startup: services
-boot: auto
-watchdog: http://[HOST]:4000/health/liveliness
 ports:
   4000/tcp: null
 ports_description:
