@@ -1,5 +1,7 @@
 FROM ghcr.io/home-assistant/base:latest
 
+ARG TARGETARCH
+
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 
@@ -16,6 +18,7 @@ RUN python3 -m venv /opt/litellm-venv && \
     ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin && \
     git clone https://github.com/rosch100/litellm.git /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
+    sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml && \
     /opt/litellm-venv/bin/pip install --no-cache-dir "/tmp/litellm-source[proxy,extra_proxy]" && \
     rm -rf /tmp/litellm-source
 
