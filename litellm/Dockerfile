@@ -9,7 +9,7 @@ ENV LANG=C.UTF-8 \
     PIP_NO_BUILD_ISOLATION=0 \
     CARGO_BUILD_JOBS=2
 
-RUN apk add --no-cache python3 py3-pip py3-yaml py3-cryptography git nodejs npm curl build-base python3-dev linux-headers cargo rust~=1.98
+RUN apk add --no-cache python3 py3-pip py3-yaml py3-cryptography git nodejs npm curl build-base python3-dev linux-headers cargo rust
 
 RUN python3 -m venv /opt/litellm-venv && \
     /opt/litellm-venv/bin/pip install --no-cache-dir maturin==1.15.0 PyYAML && \
