@@ -1,10 +1,11 @@
-"""Validate HA Supervisor settings and launch the pinned LiteLLM proxy."""
+"""Validate Home Assistant app options and launch the pinned LiteLLM proxy."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 import socket
 import sys
 from importlib.metadata import version
@@ -18,13 +19,7 @@ from litellm.proxy.db.prisma_client import should_update_prisma_schema
 EXPECTED_LITELLM_VERSION = "1.105.0"
 EXPECTED_SCHEMA_SHA256 = "2f2c5a491170f1387e4bdda2921599c0991859ba8154b0d587e9521dbf8277f3"
 OPTIONS_FILE = Path("/data/options.json")
-EXPECTED_PROVIDER_ENVIRONMENT = {
-    "altanis_ai_azure_api_key": "LITELLM_ALTANIS_AI_AZURE_API_KEY",
-    "altanis_ai_deepseek_api_key": "LITELLM_ALTANIS_AI_DEEPSEEK_API_KEY",
-    "altanis_ai_openai_api_key": "LITELLM_ALTANIS_AI_OPENAI_API_KEY",
-    "altanis_ai_openrouter_api_key": "LITELLM_ALTANIS_AI_OPENROUTER_API_KEY",
-    "instanz2_azure_api_key": "LITELLM_INSTANZ2_AZURE_API_KEY",
-}
+ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def fail(message: str) -> None:
@@ -43,13 +38,17 @@ def validate_database_url(database_url: str) -> tuple[str, int]:
     parsed = urlsplit(database_url)
     if parsed.scheme not in {"postgres", "postgresql"}:
         fail("database_url must use PostgreSQL")
-    if parsed.hostname != "192.168.20.11" or parsed.port != 5432:
-        fail("database_url must target the existing PostgreSQL host 192.168.20.11 on port 5432")
-    if parsed.path != "/litellm":
-        fail("database_url must target the existing litellm database")
-    if parsed.username != "litellm" or not parsed.password:
-        fail("database_url must use the existing authenticated litellm database user")
-    return parsed.hostname, parsed.port
+    if not parsed.hostname or not parsed.path.strip("/"):
+        fail("database_url must include a host, port and database name")
+    if not parsed.username or parsed.password is None:
+        fail("database_url must include an authenticated database user")
+    try:
+        port = parsed.port
+    except ValueError:
+        fail("database_url contains an invalid port")
+    if port is None:
+        fail("database_url must include a port")
+    return parsed.hostname, port
 
 
 def verify_runtime_schema() -> None:
@@ -70,7 +69,7 @@ def verify_runtime_schema() -> None:
     except OSError:
         fail("LiteLLM Prisma schema is missing from the runtime image")
     if actual_schema != EXPECTED_SCHEMA_SHA256:
-        fail("LiteLLM Prisma schema differs from the production schema; refusing shared database access")
+        fail("LiteLLM Prisma schema differs from the pinned runtime schema; refusing database access")
 
 
 def load_litellm_config(options: dict[str, object]) -> Path:
@@ -81,9 +80,6 @@ def load_litellm_config(options: dict[str, object]) -> Path:
         fail(f"Unable to load LiteLLM config file: {exc}")
     if not isinstance(config, dict):
         fail("LiteLLM config must be a YAML mapping")
-    router = config.get("router_settings")
-    if not isinstance(router, dict) or not isinstance(router.get("model_group_alias"), dict):
-        fail("LiteLLM router_settings.model_group_alias must be present in the app config")
     general = config.setdefault("general_settings", {})
     if not isinstance(general, dict):
         fail("LiteLLM general_settings must be a YAML mapping")
@@ -93,7 +89,7 @@ def load_litellm_config(options: dict[str, object]) -> Path:
         fail("disable_prisma_schema_update=true conflicts with the pinned environment schema guard")
     general.pop("disable_prisma_schema_update", None)
     if general.get("store_model_in_db") is False:
-        fail("store_model_in_db=false conflicts with the production database-backed model configuration")
+        fail("store_model_in_db=false conflicts with database-backed model configuration")
     general["store_model_in_db"] = True
 
     runtime_dir = Path("/tmp/litellm-haos")
@@ -111,10 +107,35 @@ def wait_for_database(host: str, port: int) -> None:
             return
     except OSError as exc:
         fail(
-            "PostgreSQL is unreachable over the existing routed network; check HAOS routing, "
-            "the return route, firewall and PostgreSQL allowlist "
+            "PostgreSQL is unreachable; check routing, firewall and database access rules "
             f"(connection error: {type(exc).__name__})"
         )
+
+
+def configure_provider_environment(options: dict[str, object], environment: dict[str, str]) -> None:
+    variables = options.get("environment_variables", [])
+    if not isinstance(variables, list):
+        fail("environment_variables must be a list of name/value entries")
+
+    for item in variables:
+        if not isinstance(item, dict):
+            fail("Each environment_variables entry must be a mapping")
+        name = item.get("name")
+        value = item.get("value")
+        if not isinstance(name, str) or not ENVIRONMENT_NAME.fullmatch(name):
+            fail("Environment variable names must use shell-compatible identifier syntax")
+        if name in {
+            "DATABASE_URL",
+            "LITELLM_MASTER_KEY",
+            "LITELLM_SALT_KEY",
+            "DISABLE_SCHEMA_UPDATE",
+            "DISABLE_ADMIN_UI",
+            "STORE_MODEL_IN_DB",
+        }:
+            fail(f"Environment variable {name!r} is reserved by the app")
+        if not isinstance(value, str) or not value:
+            fail(f"Environment variable value for {name!r} must not be empty")
+        environment[name] = value
 
 
 def main() -> None:
@@ -139,18 +160,16 @@ def main() -> None:
     environment["STORE_MODEL_IN_DB"] = "true"
 
     salt_key = options.get("salt_key")
-    if salt_key:
-        if not isinstance(salt_key, str):
-            fail("salt_key must be a string")
+    if salt_key is not None:
+        if not isinstance(salt_key, str) or not salt_key:
+            fail("salt_key must be a non-empty string when provided")
         environment["LITELLM_SALT_KEY"] = salt_key
 
-    for option_name, environment_name in EXPECTED_PROVIDER_ENVIRONMENT.items():
-        environment[environment_name] = required_secret(options, option_name)
-
+    configure_provider_environment(options, environment)
     wait_for_database(database_host, database_port)
     print(
         f"[LiteLLM HA app] Starting LiteLLM {EXPECTED_LITELLM_VERSION} against "
-        f"{database_host}:{database_port}/litellm; schema migrations disabled and Admin UI disabled",
+        f"{database_host}:{database_port}; schema migrations disabled and Admin UI disabled",
         flush=True,
     )
     os.execvpe(
