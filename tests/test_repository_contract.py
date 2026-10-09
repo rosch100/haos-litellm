@@ -44,6 +44,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile)
         self.assertIn("cmake ninja", dockerfile)
         self.assertIn("scikit-build-core", dockerfile)
+        self.assertIn("pip install maturin==1.15.0 numpy PyYAML scikit-build-core", dockerfile)
         self.assertIn('pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"', dockerfile)
         self.assertIn('sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml', dockerfile)
         self.assertIn('ENV IMAGE="ghcr.io/rosch100/haos-litellm-litellm:${BUILD_VERSION}"', dockerfile)

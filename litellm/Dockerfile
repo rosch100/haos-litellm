@@ -15,7 +15,7 @@ RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers 
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python3 -m venv /opt/litellm-venv && \
-    /opt/litellm-venv/bin/pip install maturin==1.15.0 PyYAML scikit-build-core && \
+    /opt/litellm-venv/bin/pip install maturin==1.15.0 numpy PyYAML scikit-build-core && \
     ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin && \
     git clone --filter=blob:none https://github.com/rosch100/litellm.git /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
