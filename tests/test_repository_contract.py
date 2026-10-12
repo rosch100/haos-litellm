@@ -57,6 +57,7 @@ class RepositoryContractTests(unittest.TestCase):
             "ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile
         )
         self.assertIn("cmake ninja", dockerfile)
+        self.assertIn("libsndfile", dockerfile)
         self.assertIn(
             "LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git",
             dockerfile,
