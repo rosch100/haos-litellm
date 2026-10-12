@@ -6,7 +6,9 @@ ARG BUILD_ARCH
 
 ENV LANG=C.UTF-8 \
     LITELLM_VERSION=1.105.0 \
-    LITELLM_SOURCE_COMMIT=10444df3a0173a99ab4e4858ce6777f31530e6c5 \
+    LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git \
+    LITELLM_SOURCE_COMMIT=80b9556dd312d18c535ae06884faa97d1fdb8f46 \
+    LITELLM_SOURCE_TAG=v1.105.0 \
     CARGO_BUILD_JOBS=2 \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
@@ -17,8 +19,9 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python3 -m venv /opt/litellm-venv && \
     /opt/litellm-venv/bin/pip install maturin==1.15.0 numpy PyYAML scikit-build-core && \
     ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin && \
-    git clone --filter=blob:none https://github.com/rosch100/litellm.git /tmp/litellm-source && \
+    git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}" /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
+    test "$(git -C /tmp/litellm-source describe --tags --exact-match "${LITELLM_SOURCE_COMMIT}")" = "${LITELLM_SOURCE_TAG}" && \
     sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml && \
     /opt/litellm-venv/bin/pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]" && \
     rm -rf /tmp/litellm-source

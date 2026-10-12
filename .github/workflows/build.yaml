@@ -1,26 +1,31 @@
 name: LiteLLM App CI
 
 on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "litellm/**"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/update-litellm.yaml"
+      - "repository.yaml"
+      - ".github/workflows/build.yaml"
   pull_request:
     branches:
       - main
+    paths:
+      - "litellm/**"
+      - "scripts/**"
+      - "tests/**"
+      - ".github/workflows/update-litellm.yaml"
+      - "repository.yaml"
+      - ".github/workflows/build.yaml"
     types:
       - opened
       - synchronize
       - reopened
       - ready_for_review
-    paths:
-      - "litellm/**"
-      - "tests/**"
-      - "repository.yaml"
-      - ".github/workflows/build.yaml"
-  push:
-    branches:
-      - main
-    paths:
-      - "litellm/**"
-      - "repository.yaml"
-      - ".github/workflows/build.yaml"
 
 permissions:
   contents: read
@@ -32,10 +37,10 @@ concurrency:
 jobs:
   validate:
     name: Validate Home Assistant app contract
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out pull request merge result
+      - name: Check out source
         uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -54,27 +59,25 @@ jobs:
           path: ./litellm
 
   build:
-    name: Build ARM64 image artifact
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    name: Build ARM64 image once on branch
+    if: github.event_name == 'push' && github.ref != 'refs/heads/main' && github.repository == 'rosch100/haos-litellm'
     runs-on: ubuntu-24.04-arm
     needs: validate
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Check out pull request merge result
+      - name: Check out branch source
         uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Read app metadata
-        id: version
+        id: metadata
         run: |
           version="$(awk -F '"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          arch="$(awk '/^  - / {print $2; exit}' litellm/config.yaml)"
-          test -n "$arch"
-          {
-            echo "value=$version"
-            echo "arch=$arch"
-          } >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
       - name: Log in to GitHub Container Registry
@@ -83,48 +86,116 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push ARM64 image for PR verification
+      - name: Build and publish immutable branch image
         id: image
         uses: docker/build-push-action@v7.0.0
         with:
           context: ./litellm
           platforms: linux/arm64
           push: true
-          tags: ghcr.io/rosch100/haos-litellm-litellm:pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-          cache-from: type=gha,scope=litellm-pr-${{ github.event.pull_request.number }}
-          cache-to: type=gha,mode=max,scope=litellm-pr-${{ github.event.pull_request.number }}
+          tags: ghcr.io/rosch100/haos-litellm-litellm:sha-${{ github.sha }}
+          cache-from: type=gha,scope=litellm-main
+          cache-to: type=gha,mode=max,scope=litellm-main
           build-args: |
-            BUILD_VERSION=${{ steps.version.outputs.value }}
+            BUILD_VERSION=${{ steps.metadata.outputs.version }}
             BUILD_ARCH=aarch64
-      - name: Record image provenance
+      - name: Record image digest provenance
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          SOURCE_TREE: ${{ github.sha }}
-          APP_VERSION: ${{ steps.version.outputs.value }}
           IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          source_tree="$(git rev-parse "$SOURCE_TREE^{tree}")"
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
           jq -n \
-            --arg pr_number "$PR_NUMBER" \
-            --arg pr_head_sha "$PR_HEAD_SHA" \
-            --arg source_tree "$source_tree" \
-            --arg version "$APP_VERSION" \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg image "ghcr.io/rosch100/haos-litellm-litellm" \
+            --arg version "$VERSION" \
             --arg digest "$IMAGE_DIGEST" \
-            '{pr_number: $pr_number, pr_head_sha: $pr_head_sha, source_tree: $source_tree, version: $version, digest: $digest}' \
-            > "${{ runner.temp }}/litellm-image.json"
-      - name: Upload image provenance for post-merge promotion
+            '{source_sha: $source_sha, image: $image, version: $version, digest: $digest}' \
+            > "$RUNNER_TEMP/litellm-image.json"
+          echo "Built ghcr.io/rosch100/haos-litellm-litellm:sha-${GITHUB_SHA} at ${IMAGE_DIGEST}"
+      - name: Preserve digest provenance for promotion
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: litellm-image-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: litellm-image-${{ github.sha }}
           path: ${{ runner.temp }}/litellm-image.json
           if-no-files-found: error
           retention-days: 7
 
-  promote:
-    name: Publish tested ARM64 image
-    if: github.event_name == 'push'
+  build-fork-pr:
+    name: Build ARM64 image for fork pull request
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-24.04-arm
+    needs: validate
+    steps:
+      - name: Check out pull request source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read app metadata
+        id: metadata
+        run: |
+          version="$(awk -F '\"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
+          [[ "$version" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.0.0
+      - name: Build ARM64 image without publishing
+        uses: docker/build-push-action@v7.0.0
+        with:
+          context: ./litellm
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha,scope=litellm-fork-pr
+          build-args: |
+            BUILD_VERSION=${{ steps.metadata.outputs.version }}
+            BUILD_ARCH=aarch64
+
+  verify-branch-image:
+    name: Verify successful branch image build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    timeout-minutes: 60
+    steps:
+      - name: Wait for the matching branch image build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          for _ in {1..210}; do
+            while IFS=$'\t' read -r run_id status conclusion; do
+              if [[ "$status" == completed && "$conclusion" == success ]]; then
+                artifact_name="litellm-image-$PR_HEAD_SHA"
+                artifact_id="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$run_id/artifacts" \
+                  --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
+                if [[ -n "$artifact_id" ]]; then
+                  exit 0
+                fi
+              fi
+              if [[ "$status" == completed && "$conclusion" != success ]]; then
+                echo "The branch image build for $PR_HEAD_SHA ended with $conclusion" >&2
+                exit 1
+              fi
+            done < <(
+              gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push --branch "$PR_BRANCH" \
+                --json databaseId,headSha,status,conclusion --limit 100 \
+                | jq -r --arg sha "$PR_HEAD_SHA" '[.[] | select(.headSha == $sha)] | sort_by(.databaseId) | reverse | .[] | [.databaseId, .status, (.conclusion // "")] | @tsv'
+            )
+            sleep 10
+          done
+          echo "No successful branch image build with provenance found for $PR_HEAD_SHA" >&2
+          exit 1
+
+  promote:
+    name: Promote branch image on main without rebuilding
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'rosch100/haos-litellm'
+    runs-on: ubuntu-latest
+    outputs:
+      promoted: ${{ steps.source.outputs.promoted }}
     permissions:
       contents: read
       pull-requests: read
@@ -136,106 +207,128 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Find the merged pull request and successful image build
-        id: run
-        env:
-          GH_TOKEN: ${{ github.token }}
-          MERGE_SHA: ${{ github.sha }}
-        run: |
-          # shellcheck disable=SC2016
-          pull_request="$(gh api "repos/$GITHUB_REPOSITORY/commits/$MERGE_SHA/pulls" \
-            --jq ".[] | select(.merged_at != null and .merge_commit_sha == \"$MERGE_SHA\") | {number, head_sha: .head.sha, head_branch: .head.ref}" \
-            | jq -s '.[0] // empty')"
-          test -n "$pull_request"
-          pr_number="$(jq -r '.number' <<< "$pull_request")"
-          pr_head_sha="$(jq -r '.head_sha' <<< "$pull_request")"
-          pr_branch="$(jq -r '.head_branch' <<< "$pull_request")"
-          artifact_name="litellm-image-$pr_number-$pr_head_sha"
-          run_id=""
-          while IFS= read -r candidate; do
-            # shellcheck disable=SC2016
-            artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate/artifacts" \
-              --jq --arg name "$artifact_name" \
-              '.artifacts[] | select(.name == $name and .expired == false) | .id' || true)"
-            if [[ -n "$artifact_id" ]]; then
-              run_id="$candidate"
-              break
-            fi
-          done < <(
-            gh run list --workflow build.yaml --event pull_request \
-              --json databaseId,headSha,conclusion --limit 100 \
-              | jq -r --arg sha "$pr_head_sha" \
-                '[.[] | select(.headSha == $sha and .conclusion == "success")] | sort_by(.databaseId) | reverse | .[].databaseId'
-          )
-          test -n "$run_id"
-          {
-            echo "number=$pr_number"
-            echo "head_sha=$pr_head_sha"
-            echo "head_branch=$pr_branch"
-            echo "run_id=$run_id"
-            echo "artifact_name=$artifact_name"
-          } >> "$GITHUB_OUTPUT"
-      - name: Download tested image artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE_ARTIFACT: ${{ steps.run.outputs.artifact_name }}
-          RUN_ID: ${{ steps.run.outputs.run_id }}
-        run: gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$IMAGE_ARTIFACT" --dir "${{ runner.temp }}/litellm-image"
-      - name: Verify image artifact provenance
-        id: provenance
-        env:
-          PR_NUMBER: ${{ steps.run.outputs.number }}
-          PR_HEAD_SHA: ${{ steps.run.outputs.head_sha }}
-          PR_BRANCH: ${{ steps.run.outputs.head_branch }}
-          MERGED_SHA: ${{ github.sha }}
-          IMAGE_METADATA: ${{ runner.temp }}/litellm-image/litellm-image.json
-        run: |
-          version="$(awk -F '"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          pr_source_tree="$(git rev-parse "$PR_HEAD_SHA^{tree}")"
-          git fetch --no-tags origin "$PR_BRANCH"
-          if ! git merge-base --is-ancestor "$PR_HEAD_SHA" "$MERGED_SHA"; then
-            merged_parent="$(git rev-parse "$MERGED_SHA^1")"
-            test "$(git rev-parse "$merged_parent^{tree}")" = "$pr_source_tree"
-          fi
-          jq -e \
-            --arg pr "$PR_NUMBER" \
-            --arg head_sha "$PR_HEAD_SHA" \
-            --arg source_tree "$pr_source_tree" \
-            --arg version "$version" \
-            '.pr_number == $pr and .pr_head_sha == $head_sha and .source_tree == $source_tree and .version == $version' \
-            "$IMAGE_METADATA" >/dev/null
-          digest="$(jq -r '.digest' "$IMAGE_METADATA")"
-          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          arch="$(awk '/^  - / {print $2; exit}' litellm/config.yaml)"
-          test -n "$arch"
-          {
-            echo "value=$version"
-            echo "digest=$digest"
-            echo "arch=$arch"
-          } >> "$GITHUB_OUTPUT"
+      - name: Set up GitHub CLI
+        run: sudo apt-get update && sudo apt-get install --yes gh jq
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.0.0
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4.0.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Retag the PR image with release tags
+      - name: Find the merged pull request and successful image build
+        id: source
         env:
-          APP_VERSION: ${{ steps.provenance.outputs.value }}
-          SOURCE_TAG: ghcr.io/rosch100/haos-litellm-litellm:pr-${{ steps.run.outputs.number }}-${{ steps.run.outputs.head_sha }}
-          EXPECTED_DIGEST: ${{ steps.provenance.outputs.digest }}
-          BUILD_ARCH: ${{ steps.provenance.outputs.arch }}
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          docker pull "$SOURCE_TAG"
-          registry_digest="$(docker buildx imagetools inspect "$SOURCE_TAG" --format '{{.Digest}}')"
-          test "$registry_digest" = "$EXPECTED_DIGEST"
-          image_id="$(docker image inspect "$SOURCE_TAG" --format '{{.Id}}')"
-          version_tag=ghcr.io/rosch100/haos-litellm-litellm:"$APP_VERSION"
-          latest=ghcr.io/rosch100/haos-litellm-litellm:latest
-          test "$(docker image inspect "$SOURCE_TAG" --format '{{.Architecture}}')" = "$BUILD_ARCH"
-          test "$(docker image inspect "$SOURCE_TAG" --format '{{index .Config.Labels "io.hass.version"}}')" = "$APP_VERSION"
-          docker tag "$image_id" "$version_tag"
-          docker tag "$image_id" "$latest"
-          docker push "$version_tag"
-          docker push "$latest"
+          pull_request="$(gh api "repos/$REPOSITORY/commits/$MERGE_SHA/pulls" \
+            --jq ".[] | select(.merged_at != null and .merge_commit_sha == \"$MERGE_SHA\") | {number, head_sha: .head.sha, head_branch: .head.ref, head_repository: .head.repo.full_name}" \
+            | jq -s ".[0] // empty")"
+          if [[ -z "$pull_request" ]]; then
+            echo "No merged pull request found for $MERGE_SHA; direct pushes to main are not promoted here."
+            echo "promoted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
+          pr_number="$(jq -r ".number" <<< "$pull_request")"
+          pr_head_sha="$(jq -r ".head_sha" <<< "$pull_request")"
+          pr_branch="$(jq -r ".head_branch" <<< "$pull_request")"
+          pr_repository="$(jq -r ".head_repository" <<< "$pull_request")"
+          test "$pr_repository" = "$REPOSITORY"
+          run_id="$(gh run list --repo "$REPOSITORY" --workflow build.yaml --event push --branch "$pr_branch" \
+            --json databaseId,headSha,conclusion --limit 100 \
+            | jq -r --arg sha "$pr_head_sha" '[.[] | select(.headSha == $sha and .conclusion == "success")] | sort_by(.databaseId) | reverse | .[0].databaseId // empty')"
+          test -n "$run_id"
+          built_sha="$(gh run view "$run_id" --repo "$REPOSITORY" --json headSha --jq .headSha)"
+          test "$built_sha" = "$pr_head_sha"
+          gh run view "$run_id" --repo "$REPOSITORY" --json jobs --jq '.jobs[] | select(.name == "Build ARM64 image once on branch") | .conclusion' | rg -q '^success$'
+          artifact_name="litellm-image-$pr_head_sha"
+          artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
+            --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
+          test -n "$artifact_id"
+          {
+            echo "number=$pr_number"
+            echo "head_sha=$pr_head_sha"
+            echo "run_id=$run_id"
+            echo "artifact_id=$artifact_id"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download image digest provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.source.outputs.artifact_id }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/litellm-image"
+          gh api "repos/$REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > "$RUNNER_TEMP/litellm-image.zip"
+          unzip -q "$RUNNER_TEMP/litellm-image.zip" -d "$RUNNER_TEMP/litellm-image"
+      - name: Read app version
+        id: version
+        run: |
+          version="$(awk -F '"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Verify image digest provenance
+        id: image
+        env:
+          PR_HEAD_SHA: ${{ steps.source.outputs.head_sha }}
+          APP_VERSION: ${{ steps.version.outputs.value }}
+          IMAGE_METADATA: ${{ runner.temp }}/litellm-image/litellm-image.json
+        run: |
+          jq -e \
+            --arg source_sha "$PR_HEAD_SHA" \
+            --arg image "ghcr.io/rosch100/haos-litellm-litellm" \
+            --arg version "$APP_VERSION" \
+            '.source_sha == $source_sha and .image == $image and .version == $version' \
+            "$IMAGE_METADATA" >/dev/null
+          digest="$(jq -r '.digest' "$IMAGE_METADATA")"
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Retag the exact branch image as version and latest
+        env:
+          SOURCE_IMAGE: ghcr.io/rosch100/haos-litellm-litellm
+          SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
+          VERSION_TAG: ghcr.io/rosch100/haos-litellm-litellm:${{ steps.version.outputs.value }}
+          LATEST_TAG: ghcr.io/rosch100/haos-litellm-litellm:latest
+        run: docker buildx imagetools create --tag "$VERSION_TAG" --tag "$LATEST_TAG" "$SOURCE_IMAGE@$SOURCE_DIGEST"
+
+  release:
+    name: Publish GitHub release after image promotion
+    if: needs.promote.outputs.promoted == 'true'
+    needs: promote
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out merged source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read synchronized LiteLLM release metadata
+        id: metadata
+        run: |
+          version="$(awk -F '"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
+          litellm_version="$(awk -F '"' '/^EXPECTED_LITELLM_VERSION =/ {print $2; exit}' litellm/run.py)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$version" = "$litellm_version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq .id 2>/dev/null || true)"
+          if [[ -n "$release_id" ]]; then
+            echo "GitHub release $VERSION already exists"
+            exit 0
+          fi
+          gh api "repos/$REPOSITORY/releases" \
+            --method POST \
+            --field "tag_name=$VERSION" \
+            --field "target_commitish=$GITHUB_SHA" \
+            --field "name=LiteLLM $VERSION" \
+            --field generate_release_notes=true

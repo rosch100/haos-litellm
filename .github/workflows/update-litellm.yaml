@@ -1,0 +1,63 @@
+name: Update LiteLLM release
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-litellm-release
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'rosch100/haos-litellm'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6.0.0
+        with:
+          python-version: "3.x"
+      - name: Prepare update from latest official LiteLLM release
+        id: update
+        run: python scripts/update_litellm.py
+      - name: Require automation token when an update is available
+        if: steps.update.outputs.updated == 'true'
+        env:
+          AUTOMATION_TOKEN: ${{ secrets.LITELLM_UPDATE_TOKEN }}
+        run: |
+          if [[ -z "$AUTOMATION_TOKEN" ]]; then
+            echo "Configure the LITELLM_UPDATE_TOKEN repository secret so the new update PR's checks run automatically." >&2
+            exit 1
+          fi
+      - name: Create or update release PR
+        if: steps.update.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v8.0.0
+        with:
+          token: ${{ secrets.LITELLM_UPDATE_TOKEN }}
+          add-paths: |
+            litellm/Dockerfile
+            litellm/run.py
+            litellm/config.yaml
+          branch: automation/litellm-${{ steps.update.outputs.version }}
+          delete-branch: true
+          commit-message: "chore(litellm): update to ${{ steps.update.outputs.version }}"
+          title: "chore(litellm): update to ${{ steps.update.outputs.version }}"
+          body: |
+            This PR updates the Home Assistant ARM64 app to the official LiteLLM release `${{ steps.update.outputs.tag }}`.
+
+            The source commit, installed package version, Prisma schema checksum, app version, and image version tag are kept in sync. The ARM64 image build and repository contract checks must pass before merge and release.
+
+            The image build runs on the PR head commit and creates an immutable SHA-tagged image. After the PR merges, the main workflow promotes that exact image digest and then creates the GitHub Release.
+          labels: enhancement

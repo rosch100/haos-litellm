@@ -18,7 +18,7 @@ from litellm.proxy.db.prisma_client import should_update_prisma_schema
 
 EXPECTED_LITELLM_VERSION = "1.105.0"
 EXPECTED_SCHEMA_SHA256 = (
-    "2f2c5a491170f1387e4bdda2921599c0991859ba8154b0d587e9521dbf8277f3"
+    "a17e69687d14d78dc7cee49770f1c1e8b2726cd8823d37c6dff48ae151533342"
 )
 OPTIONS_FILE = Path("/data/options.json")
 ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
