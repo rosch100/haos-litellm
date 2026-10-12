@@ -130,7 +130,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(
             'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
         )
-        self.assertIn('select(.name == "Build ARM64 image once on branch")', workflow)
+        self.assertIn(
+            'select(.name == "Build ARM64 image once on branch" and .conclusion == "success")',
+            workflow,
+        )
+        self.assertIn("grep -Fqx 'Build ARM64 image once on branch'", workflow)
+        self.assertNotIn("| rg -q", workflow)
         self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertNotIn(
