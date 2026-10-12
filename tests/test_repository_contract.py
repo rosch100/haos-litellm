@@ -75,6 +75,13 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("platforms: linux/arm64", workflow)
         self.assertIn('      - "repository.yaml"', workflow)
+        self.assertIn("push: true", workflow)
+        self.assertIn("actions/upload-artifact@", workflow)
+        self.assertIn("if: github.event_name == 'push'", workflow)
+        self.assertIn("if: github.event_name == 'pull_request' && github.event.pull_request.draft == false", workflow)
+        self.assertIn('latest=ghcr.io/rosch100/haos-litellm-litellm:latest', workflow)
+        self.assertIn('docker push "$latest"', workflow)
+        self.assertIn("cache-to: type=gha,mode=max,scope=litellm-pr-", workflow)
         self.assertFalse((APP / "build.yaml").exists())
 
     def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
