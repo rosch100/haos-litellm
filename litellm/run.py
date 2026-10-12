@@ -17,7 +17,9 @@ import yaml
 from litellm.proxy.db.prisma_client import should_update_prisma_schema
 
 EXPECTED_LITELLM_VERSION = "1.105.0"
-EXPECTED_SCHEMA_SHA256 = "2f2c5a491170f1387e4bdda2921599c0991859ba8154b0d587e9521dbf8277f3"
+EXPECTED_SCHEMA_SHA256 = (
+    "2f2c5a491170f1387e4bdda2921599c0991859ba8154b0d587e9521dbf8277f3"
+)
 OPTIONS_FILE = Path("/data/options.json")
 ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -62,34 +64,52 @@ def verify_runtime_schema() -> None:
 
     actual_version = version("litellm")
     if actual_version != EXPECTED_LITELLM_VERSION:
-        fail(f"LiteLLM version mismatch; expected {EXPECTED_LITELLM_VERSION}, got {actual_version}")
+        fail(
+            f"LiteLLM version mismatch; expected {EXPECTED_LITELLM_VERSION}, got {actual_version}"
+        )
     schema_path = Path(litellm.__file__).parent / "proxy" / "schema.prisma"
     try:
         actual_schema = hashlib.sha256(schema_path.read_bytes()).hexdigest()
     except OSError:
         fail("LiteLLM Prisma schema is missing from the runtime image")
     if actual_schema != EXPECTED_SCHEMA_SHA256:
-        fail("LiteLLM Prisma schema differs from the pinned runtime schema; refusing database access")
+        fail(
+            "LiteLLM Prisma schema differs from the pinned runtime schema; refusing database access"
+        )
+
+
+def _general_settings(config: dict[str, object]) -> dict[str, object]:
+    general = config.get("general_settings")
+    if general is None:
+        general = {}
+        config["general_settings"] = general
+    if not isinstance(general, dict):
+        fail("LiteLLM general_settings must be a YAML mapping")
+    return general
 
 
 def load_litellm_config(options: dict[str, object]) -> Path:
-    config_path = Path(str(options.get("config_file", "/config/litellm.yaml"))).resolve()
+    config_path = Path(
+        str(options.get("config_file", "/config/litellm.yaml"))
+    ).resolve()
     try:
         config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as exc:
         fail(f"Unable to load LiteLLM config file: {exc}")
     if not isinstance(config, dict):
         fail("LiteLLM config must be a YAML mapping")
-    general = config.setdefault("general_settings", {})
-    if not isinstance(general, dict):
-        fail("LiteLLM general_settings must be a YAML mapping")
+    general = _general_settings(config)
     general["master_key"] = "os.environ/LITELLM_MASTER_KEY"
     general.pop("database_url", None)
     if general.get("disable_prisma_schema_update") is True:
-        fail("disable_prisma_schema_update=true conflicts with the pinned environment schema guard")
+        fail(
+            "disable_prisma_schema_update=true conflicts with the pinned environment schema guard"
+        )
     general.pop("disable_prisma_schema_update", None)
     if general.get("store_model_in_db") is False:
-        fail("store_model_in_db=false conflicts with database-backed model configuration")
+        fail(
+            "store_model_in_db=false conflicts with database-backed model configuration"
+        )
     general["store_model_in_db"] = True
 
     runtime_dir = Path("/tmp/litellm-haos")
@@ -112,7 +132,9 @@ def wait_for_database(host: str, port: int) -> None:
         )
 
 
-def configure_provider_environment(options: dict[str, object], environment: dict[str, str]) -> None:
+def configure_provider_environment(
+    options: dict[str, object], environment: dict[str, str]
+) -> None:
     variables = options.get("environment_variables", [])
     if not isinstance(variables, list):
         fail("environment_variables must be a list of name/value entries")
@@ -123,7 +145,9 @@ def configure_provider_environment(options: dict[str, object], environment: dict
         name = item.get("name")
         value = item.get("value")
         if not isinstance(name, str) or not ENVIRONMENT_NAME.fullmatch(name):
-            fail("Environment variable names must use shell-compatible identifier syntax")
+            fail(
+                "Environment variable names must use shell-compatible identifier syntax"
+            )
         if name in {
             "DATABASE_URL",
             "LITELLM_MASTER_KEY",
@@ -174,7 +198,15 @@ def main() -> None:
     )
     os.execvpe(
         "/opt/litellm-venv/bin/litellm",
-        ["litellm", "--config", str(runtime_config), "--host", "0.0.0.0", "--port", "4000"],
+        [
+            "litellm",
+            "--config",
+            str(runtime_config),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "4000",
+        ],
         environment,
     )
 
