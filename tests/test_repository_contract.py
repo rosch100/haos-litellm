@@ -57,8 +57,14 @@ class RepositoryContractTests(unittest.TestCase):
             "ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile
         )
         self.assertIn("cmake ninja", dockerfile)
+        self.assertIn("libsndfile", dockerfile)
         self.assertIn("openssl", dockerfile)
-        self.assertIn("linux-musl-arm64-openssl-3.0.x", dockerfile)
+        self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
+        self.assertIn('target = "linux-musl-arm64-openssl-3.0.x"', dockerfile)
+        self.assertIn("schema.replace(source, f\"{source}, {target}\")", dockerfile)
+        self.assertIn("from prisma import client", dockerfile)
+        self.assertIn("from prisma.engine.utils import ensure", dockerfile)
+        self.assertIn("ensure(client.BINARY_PATHS.query_engine)", dockerfile)
         self.assertIn(
             "LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git",
             dockerfile,

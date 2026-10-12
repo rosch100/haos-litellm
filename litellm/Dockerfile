@@ -13,7 +13,7 @@ ENV LANG=C.UTF-8 \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
 
-RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja openssl
+RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja libsndfile openssl
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python3 -m venv /opt/litellm-venv && \
