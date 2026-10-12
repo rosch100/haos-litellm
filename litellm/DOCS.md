@@ -20,7 +20,7 @@ Place the YAML in the Home Assistant app configuration directory for this reposi
 
 ## Database safeguards
 
-The app sets LiteLLM's supported `DISABLE_SCHEMA_UPDATE=true` environment variable and checks this behavior against the pinned LiteLLM package. It aborts before database access if the package version or Prisma schema differs from the expected values. Do not remove either protection. Review the selected PostgreSQL role's privileges against your migration policy before using an existing database. Some startup schema checks may require database metadata read permissions; the app does not grant or request schema-write privileges itself.
+The app sets LiteLLM's supported `DISABLE_SCHEMA_UPDATE=true` environment variable and verifies the pinned package's inverted `should_update_prisma_schema(disable_updates)` semantics before any database access. It aborts if schema updates would be enabled or the package version or Prisma schema differs from the expected values. Do not remove either protection. Review the selected PostgreSQL role's privileges against your migration policy before using an existing database. Some startup schema checks may require database metadata read permissions; the app does not grant or request schema-write privileges itself.
 
 Automatic startup will not migrate the schema. Apply required migrations deliberately on the database's designated schema writer, following backup and maintenance procedures. A shared database does not itself provide request load balancing, session synchronization, coordinated rate limiting, or automatic failover.
 

@@ -44,6 +44,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile)
         self.assertIn("cmake ninja", dockerfile)
         self.assertIn("scikit-build-core", dockerfile)
+        self.assertIn("app_config:ro", (APP / "config.yaml").read_text())
         self.assertIn("pip install maturin==1.15.0 numpy PyYAML scikit-build-core", dockerfile)
         self.assertIn('pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"', dockerfile)
         self.assertIn('sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml', dockerfile)
@@ -70,13 +71,28 @@ class RepositoryContractTests(unittest.TestCase):
             [{"name": "str", "value": "password"}],
         )
 
+    def test_schema_update_guard_asserts_litellm_disable_semantics(self):
+        def should_update(disable_updates=None):
+            value = "true" if disable_updates is None else disable_updates
+            if isinstance(value, str):
+                value = value.lower() == "true"
+            return not bool(value)
+
+        self.assertTrue(should_update(False))
+        self.assertFalse(should_update(True))
+        self.assertTrue(should_update("false"))
+        self.assertFalse(should_update())
+        self.assertIn("not should_update_prisma_schema(False)", (APP / "run.py").read_text())
+
     def test_startup_entrypoint_checks_version_schema_and_disable_flag(self):
         dockerfile = (APP / "Dockerfile").read_text()
         entrypoint = (APP / "run.py").read_text()
         launcher = (APP / "run.sh").read_text()
         self.assertIn('EXPECTED_LITELLM_VERSION = "1.105.0"', entrypoint)
         self.assertIn("EXPECTED_SCHEMA_SHA256", entrypoint)
-        self.assertIn('should_update_prisma_schema("false")', entrypoint)
+        self.assertIn('not should_update_prisma_schema(False)', entrypoint)
+        self.assertIn('should_update_prisma_schema(True)', entrypoint)
+        self.assertIn('not should_update_prisma_schema("false")', entrypoint)
         self.assertIn("should_update_prisma_schema()", entrypoint)
         self.assertIn('os.environ["DISABLE_SCHEMA_UPDATE"] = "true"', entrypoint)
         self.assertIn('environment["STORE_MODEL_IN_DB"] = "true"', entrypoint)
