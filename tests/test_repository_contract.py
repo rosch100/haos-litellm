@@ -17,7 +17,16 @@ proxy_module.__path__ = []
 db_module = types.ModuleType("litellm.proxy.db")
 db_module.__path__ = []
 prisma_module = types.ModuleType("litellm.proxy.db.prisma_client")
-prisma_module.should_update_prisma_schema = lambda value=None: value is True
+
+
+def should_update_prisma_schema(disable_updates=None):
+    value = "true" if disable_updates is None else disable_updates
+    if isinstance(value, str):
+        value = value.lower() == "true"
+    return not bool(value)
+
+
+prisma_module.should_update_prisma_schema = should_update_prisma_schema
 sys.modules.update(
     {
         "litellm": litellm_module,
@@ -71,17 +80,11 @@ class RepositoryContractTests(unittest.TestCase):
             [{"name": "str", "value": "password"}],
         )
 
-    def test_schema_update_guard_asserts_litellm_disable_semantics(self):
-        def should_update(disable_updates=None):
-            value = "true" if disable_updates is None else disable_updates
-            if isinstance(value, str):
-                value = value.lower() == "true"
-            return not bool(value)
-
-        self.assertTrue(should_update(False))
-        self.assertFalse(should_update(True))
-        self.assertTrue(should_update("false"))
-        self.assertFalse(should_update())
+    def test_schema_update_guard_uses_litellm_disable_semantics(self):
+        self.assertTrue(should_update_prisma_schema(False))
+        self.assertFalse(should_update_prisma_schema(True))
+        self.assertTrue(should_update_prisma_schema("false"))
+        self.assertFalse(should_update_prisma_schema())
         self.assertIn("not should_update_prisma_schema(False)", (APP / "run.py").read_text())
 
     def test_startup_entrypoint_checks_version_schema_and_disable_flag(self):
@@ -90,8 +93,8 @@ class RepositoryContractTests(unittest.TestCase):
         launcher = (APP / "run.sh").read_text()
         self.assertIn('EXPECTED_LITELLM_VERSION = "1.105.0"', entrypoint)
         self.assertIn("EXPECTED_SCHEMA_SHA256", entrypoint)
-        self.assertIn('not should_update_prisma_schema(False)', entrypoint)
-        self.assertIn('should_update_prisma_schema(True)', entrypoint)
+        self.assertIn("not should_update_prisma_schema(False)", entrypoint)
+        self.assertIn("should_update_prisma_schema(True)", entrypoint)
         self.assertIn('not should_update_prisma_schema("false")', entrypoint)
         self.assertIn("should_update_prisma_schema()", entrypoint)
         self.assertIn('os.environ["DISABLE_SCHEMA_UPDATE"] = "true"', entrypoint)
