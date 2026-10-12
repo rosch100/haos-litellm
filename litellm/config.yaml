@@ -1,5 +1,5 @@
 name: LiteLLM
-version: "1.0.4"
+version: "1.105.0"
 slug: litellm
 description: Configurable LiteLLM AI Gateway
 url: https://github.com/rosch100/haos-litellm

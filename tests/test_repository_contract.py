@@ -1,7 +1,7 @@
-from pathlib import Path
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import yaml
@@ -20,10 +20,11 @@ prisma_module = types.ModuleType("litellm.proxy.db.prisma_client")
 
 
 def should_update_prisma_schema(disable_updates=None):
-    value = "false" if disable_updates is None else disable_updates
-    if isinstance(value, str):
-        value = value.lower() == "true"
-    return not bool(value)
+    if disable_updates is None:
+        disable_updates = "false"
+    if isinstance(disable_updates, str):
+        disable_updates = disable_updates.lower() == "true"
+    return not bool(disable_updates)
 
 
 prisma_module.should_update_prisma_schema = should_update_prisma_schema
@@ -56,6 +57,13 @@ class RepositoryContractTests(unittest.TestCase):
             "ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile
         )
         self.assertIn("cmake ninja", dockerfile)
+        self.assertIn(
+            "LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git",
+            dockerfile,
+        )
+        self.assertIn(
+            'git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}"', dockerfile
+        )
         self.assertIn("scikit-build-core", dockerfile)
         self.assertIn("type: addon_config", (APP / "config.yaml").read_text())
         self.assertIn(
@@ -73,15 +81,73 @@ class RepositoryContractTests(unittest.TestCase):
             'ENV IMAGE="ghcr.io/rosch100/haos-litellm-litellm:${BUILD_VERSION}"',
             dockerfile,
         )
+        manifest_version = manifest["version"]
+        dockerfile_version = dockerfile.split("LITELLM_VERSION=", 1)[1].split()[0]
+        upstream_tag = dockerfile.split("LITELLM_SOURCE_TAG=", 1)[1].split()[0]
+        self.assertEqual(manifest_version, upstream_tag[1:])
+        self.assertEqual(manifest_version, run.EXPECTED_LITELLM_VERSION)
+        self.assertEqual(run.EXPECTED_LITELLM_VERSION, dockerfile_version)
+        self.assertIn("EXPECTED_SCHEMA_SHA256", (APP / "run.py").read_text())
         self.assertIn("platforms: linux/arm64", workflow)
         self.assertIn('      - "repository.yaml"', workflow)
         self.assertIn("push: true", workflow)
-        self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("if: github.event_name == 'push'", workflow)
-        self.assertIn("if: github.event_name == 'pull_request' && github.event.pull_request.draft == false", workflow)
-        self.assertIn('latest=ghcr.io/rosch100/haos-litellm-litellm:latest', workflow)
-        self.assertIn('docker push "$latest"', workflow)
-        self.assertIn("cache-to: type=gha,mode=max,scope=litellm-pr-", workflow)
+        self.assertIn('      - "**"', workflow)
+        self.assertIn('      - "scripts/**"', workflow.split("  push:", 1)[1])
+        push_paths = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
+        pull_request_paths = workflow.split("  pull_request:", 1)[1].split(
+            "    types:", 1
+        )[0]
+        for path in (
+            '"tests/**"',
+            '"scripts/**"',
+            '".github/workflows/update-litellm.yaml"',
+        ):
+            with self.subTest(path=path):
+                self.assertIn(f"      - {path}", push_paths)
+                self.assertIn(f"      - {path}", pull_request_paths)
+        self.assertIn("Build ARM64 image once on branch", workflow)
+        self.assertIn(
+            "if: github.event_name == 'push' && github.ref == 'refs/heads/main'",
+            workflow,
+        )
+        self.assertIn(
+            "if: github.event_name == 'push' && github.ref != 'refs/heads/main'",
+            workflow,
+        )
+        self.assertIn("if: github.event_name == 'pull_request'", workflow)
+        self.assertIn(
+            'gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push',
+            workflow,
+        )
+        self.assertIn(
+            'gh run list --repo "$REPOSITORY" --workflow build.yaml --event push',
+            workflow,
+        )
+        self.assertIn("docker buildx imagetools create", workflow)
+        self.assertIn("sha-${{ github.sha }}", workflow)
+        self.assertIn(
+            'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
+        )
+        self.assertIn('select(.name == "Build ARM64 image once on branch")', workflow)
+        self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
+        self.assertIn("docker buildx imagetools create", workflow)
+        self.assertNotIn(
+            "docker/build-push-action", workflow[workflow.index("  promote:") :]
+        )
+        self.assertIn("actions/upload-artifact@", workflow)
+        self.assertIn("needs: promote", workflow)
+        self.assertIn("repos/$REPOSITORY/releases/tags/$VERSION", workflow)
+        self.assertIn('"tag_name=$VERSION"', workflow)
+        self.assertIn('"name=LiteLLM $VERSION"', workflow)
+        self.assertIn('test "$version" = "$litellm_version"', workflow)
+        update_workflow = (ROOT / ".github/workflows/update-litellm.yaml").read_text()
+        update_script = (ROOT / "scripts/update_litellm.py").read_text()
+        self.assertIn('cron: "23 6 * * *"', update_workflow)
+        self.assertIn("python scripts/update_litellm.py", update_workflow)
+        self.assertIn("peter-evans/create-pull-request@", update_workflow)
+        self.assertIn('f"{UPSTREAM_API}/releases/latest"', update_script)
+        self.assertIn("schema_sha256=hashlib.sha256(schema).hexdigest()", update_script)
         self.assertFalse((APP / "build.yaml").exists())
 
     def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
@@ -107,15 +173,20 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertFalse(should_update_prisma_schema(True))
         self.assertTrue(should_update_prisma_schema("false"))
         self.assertTrue(should_update_prisma_schema())
-        self.assertIn(
-            "not should_update_prisma_schema(False)", (APP / "run.py").read_text()
-        )
+        self.assertFalse(should_update_prisma_schema("true"))
+        entrypoint = (APP / "run.py").read_text()
+        self.assertIn("not should_update_prisma_schema(False)", entrypoint)
+        self.assertIn("should_update_prisma_schema(True)", entrypoint)
+        self.assertIn('not should_update_prisma_schema("false")', entrypoint)
+        self.assertIn("should_update_prisma_schema()", entrypoint)
 
     def test_startup_entrypoint_checks_version_schema_and_disable_flag(self):
         dockerfile = (APP / "Dockerfile").read_text()
         entrypoint = (APP / "run.py").read_text()
         launcher = (APP / "run.sh").read_text()
-        self.assertIn('EXPECTED_LITELLM_VERSION = "1.105.0"', entrypoint)
+        self.assertIn(
+            f'EXPECTED_LITELLM_VERSION = "{run.EXPECTED_LITELLM_VERSION}"', entrypoint
+        )
         self.assertIn("EXPECTED_SCHEMA_SHA256", entrypoint)
         self.assertIn("not should_update_prisma_schema(False)", entrypoint)
         self.assertIn("should_update_prisma_schema(True)", entrypoint)
