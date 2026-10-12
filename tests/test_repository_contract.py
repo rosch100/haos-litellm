@@ -53,7 +53,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile)
         self.assertIn("cmake ninja", dockerfile)
         self.assertIn("scikit-build-core", dockerfile)
-        self.assertIn("app_config:ro", (APP / "config.yaml").read_text())
+        self.assertIn("type: addon_config", (APP / "config.yaml").read_text())
         self.assertIn("pip install maturin==1.15.0 numpy PyYAML scikit-build-core", dockerfile)
         self.assertIn('pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"', dockerfile)
         self.assertIn('sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml', dockerfile)
@@ -65,10 +65,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
         self.assertIsNone(manifest["ports"]["4000/tcp"])
-        self.assertEqual(
-            manifest["map"],
-            ["app_config:ro", {"type": "addon_config", "read_only": True}],
-        )
+        self.assertEqual(manifest["map"], [{"type": "addon_config", "read_only": True}])
 
     def test_database_and_master_key_are_required_secrets(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())

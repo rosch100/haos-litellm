@@ -26,6 +26,5 @@ schema:
     - name: str
       value: password
 map:
-  - app_config:ro
   - type: addon_config
     read_only: true
