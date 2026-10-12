@@ -53,9 +53,9 @@ def validate_database_url(database_url: str) -> tuple[str, int]:
 
 def verify_runtime_schema() -> None:
     if (
-        should_update_prisma_schema(False)
-        or not should_update_prisma_schema(True)
-        or should_update_prisma_schema("false")
+        not should_update_prisma_schema(False)
+        or should_update_prisma_schema(True)
+        or not should_update_prisma_schema("false")
         or should_update_prisma_schema()
     ):
         fail("LiteLLM schema update guard failed its runtime safety assertion")

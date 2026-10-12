@@ -15,7 +15,7 @@ The app supports ARM64 (`aarch64`). Its API port is not published on the host; c
 
 Set `database_url` to the PostgreSQL URL for the LiteLLM database and `master_key` to the gateway key you intend to use. Configure optional `salt_key` where required by your LiteLLM deployment. Put the LiteLLM YAML file in the app's configuration directory (mounted at `/config`) and set `config_file` to its path. Define provider credentials and other runtime variables as entries in `environment_variables`; the values are injected into the proxy process and should be referenced using LiteLLM's `os.environ/VARIABLE_NAME` syntax.
 
-Protect app options, configuration files, and backups because they may contain credentials. The app validates PostgreSQL URL structure, requires authenticated DB access, verifies its pinned LiteLLM version/schema compatibility before connecting, and disables automatic schema changes. Review the chosen database role's read/write privileges and schema migration policy before connecting to an existing database.
+Protect app options, configuration files, and backups because they may contain credentials. The app validates PostgreSQL URL structure, requires authenticated DB access, verifies its pinned LiteLLM version/schema compatibility and disabled-schema-update behavior before connecting, and prevents automatic schema changes. Review the chosen database role's read/write privileges and schema migration policy before connecting to an existing database.
 
 ## Build and verification
 

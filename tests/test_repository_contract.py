@@ -17,7 +17,16 @@ proxy_module.__path__ = []
 db_module = types.ModuleType("litellm.proxy.db")
 db_module.__path__ = []
 prisma_module = types.ModuleType("litellm.proxy.db.prisma_client")
-prisma_module.should_update_prisma_schema = lambda value=None: value is True
+
+
+def should_update_prisma_schema(disable_updates=None):
+    value = "false" if disable_updates is None else disable_updates
+    if isinstance(value, str):
+        value = value.lower() == "true"
+    return not bool(value)
+
+
+prisma_module.should_update_prisma_schema = should_update_prisma_schema
 sys.modules.update(
     {
         "litellm": litellm_module,
@@ -44,6 +53,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile)
         self.assertIn("cmake ninja", dockerfile)
         self.assertIn("scikit-build-core", dockerfile)
+        self.assertIn("type: addon_config", (APP / "config.yaml").read_text())
         self.assertIn("pip install maturin==1.15.0 numpy PyYAML scikit-build-core", dockerfile)
         self.assertIn('pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"', dockerfile)
         self.assertIn('sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml', dockerfile)
@@ -55,7 +65,7 @@ class RepositoryContractTests(unittest.TestCase):
     def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
         self.assertIsNone(manifest["ports"]["4000/tcp"])
-        self.assertEqual(manifest["map"], ["app_config:ro"])
+        self.assertEqual(manifest["map"], [{"type": "addon_config", "read_only": True}])
 
     def test_database_and_master_key_are_required_secrets(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
@@ -70,13 +80,22 @@ class RepositoryContractTests(unittest.TestCase):
             [{"name": "str", "value": "password"}],
         )
 
+    def test_schema_update_guard_uses_litellm_disable_semantics(self):
+        self.assertTrue(should_update_prisma_schema(False))
+        self.assertFalse(should_update_prisma_schema(True))
+        self.assertTrue(should_update_prisma_schema("false"))
+        self.assertTrue(should_update_prisma_schema())
+        self.assertIn("not should_update_prisma_schema(False)", (APP / "run.py").read_text())
+
     def test_startup_entrypoint_checks_version_schema_and_disable_flag(self):
         dockerfile = (APP / "Dockerfile").read_text()
         entrypoint = (APP / "run.py").read_text()
         launcher = (APP / "run.sh").read_text()
         self.assertIn('EXPECTED_LITELLM_VERSION = "1.105.0"', entrypoint)
         self.assertIn("EXPECTED_SCHEMA_SHA256", entrypoint)
-        self.assertIn('should_update_prisma_schema("false")', entrypoint)
+        self.assertIn("not should_update_prisma_schema(False)", entrypoint)
+        self.assertIn("should_update_prisma_schema(True)", entrypoint)
+        self.assertIn('not should_update_prisma_schema("false")', entrypoint)
         self.assertIn("should_update_prisma_schema()", entrypoint)
         self.assertIn('os.environ["DISABLE_SCHEMA_UPDATE"] = "true"', entrypoint)
         self.assertIn('environment["STORE_MODEL_IN_DB"] = "true"', entrypoint)

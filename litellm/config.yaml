@@ -1,5 +1,5 @@
 name: LiteLLM
-version: "1.0.2"
+version: "1.0.3"
 slug: litellm
 description: Configurable LiteLLM AI Gateway
 url: https://github.com/rosch100/haos-litellm
@@ -26,4 +26,5 @@ schema:
     - name: str
       value: password
 map:
-  - app_config:ro
+  - type: addon_config
+    read_only: true
