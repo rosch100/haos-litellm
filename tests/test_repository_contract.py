@@ -20,7 +20,7 @@ prisma_module = types.ModuleType("litellm.proxy.db.prisma_client")
 
 
 def should_update_prisma_schema(disable_updates=None):
-    value = "true" if disable_updates is None else disable_updates
+    value = "false" if disable_updates is None else disable_updates
     if isinstance(value, str):
         value = value.lower() == "true"
     return not bool(value)
@@ -84,7 +84,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertTrue(should_update_prisma_schema(False))
         self.assertFalse(should_update_prisma_schema(True))
         self.assertTrue(should_update_prisma_schema("false"))
-        self.assertFalse(should_update_prisma_schema())
+        self.assertTrue(should_update_prisma_schema())
         self.assertIn("not should_update_prisma_schema(False)", (APP / "run.py").read_text())
 
     def test_startup_entrypoint_checks_version_schema_and_disable_flag(self):
