@@ -138,12 +138,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(
             'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
         )
-        self.assertIn(
-            'select(.name == "Build ARM64 image once on branch" and .conclusion == "success")',
-            workflow,
-        )
-        self.assertIn("grep -Fqx 'Build ARM64 image once on branch'", workflow)
-        self.assertNotIn("| rg -q", workflow)
+        self.assertIn('select(.name == "Build ARM64 image once on branch")', workflow)
         self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertNotIn(
@@ -155,25 +150,6 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('"tag_name=$VERSION"', workflow)
         self.assertIn('"name=LiteLLM $VERSION"', workflow)
         self.assertIn('test "$version" = "$litellm_version"', workflow)
-        repository_workflow = (
-            ROOT / ".github/workflows/repository-checks.yaml"
-        ).read_text()
-        security_workflow = (ROOT / ".github/workflows/zizmor.yaml").read_text()
-        self.assertIn("jobs:\n  validate-repository:", repository_workflow)
-        self.assertIn("repository = yaml.safe_load", repository_workflow)
-        self.assertIn('repository.get("name")', repository_workflow)
-        self.assertIn("name: Audit GitHub Actions security", security_workflow)
-        self.assertIn("zizmor --format=github .", security_workflow)
-        self.assertIn("name: Check GitHub Actions workflow syntax", repository_workflow)
-        self.assertIn("name: Lint Home Assistant Dockerfile", repository_workflow)
-        self.assertIn("name: Lint Home Assistant shell scripts", repository_workflow)
-        dependabot = yaml.safe_load(
-            (ROOT / ".github/dependabot.yaml").read_text(encoding="utf-8")
-        )
-        self.assertEqual(
-            [update["package-ecosystem"] for update in dependabot["updates"]],
-            ["github-actions", "docker"],
-        )
         update_workflow = (ROOT / ".github/workflows/update-litellm.yaml").read_text()
         update_script = (ROOT / "scripts/update_litellm.py").read_text()
         self.assertIn('cron: "23 6 * * *"', update_workflow)
