@@ -10,6 +10,7 @@ ENV LANG=C.UTF-8 \
     LITELLM_SOURCE_COMMIT=80b9556dd312d18c535ae06884faa97d1fdb8f46 \
     LITELLM_SOURCE_TAG=v1.105.0 \
     CARGO_BUILD_JOBS=2 \
+    PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
 
@@ -24,6 +25,8 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     test "$(git -C /tmp/litellm-source describe --tags --exact-match "${LITELLM_SOURCE_COMMIT}")" = "${LITELLM_SOURCE_TAG}" && \
     sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml && \
     /opt/litellm-venv/bin/pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]" && \
+    cd /tmp/litellm-source && \
+    /opt/litellm-venv/bin/prisma generate --schema=litellm/proxy/schema.prisma && \
     rm -rf /tmp/litellm-source
 
 COPY run.py /run.py
