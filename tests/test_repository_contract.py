@@ -120,6 +120,7 @@ class RepositoryContractTests(unittest.TestCase):
             'gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push',
             workflow,
         )
+        self.assertNotIn("--jq --arg", workflow)
         self.assertIn(
             'gh run list --repo "$REPOSITORY" --workflow build.yaml --event push',
             workflow,

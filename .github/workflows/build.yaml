@@ -171,8 +171,7 @@ jobs:
               if [[ "$status" == completed && "$conclusion" == success ]]; then
                 artifact_name="litellm-image-$PR_HEAD_SHA"
                 artifact_id="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$run_id/artifacts" \
-                  --jq --arg name "$artifact_name" \
-                  ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
+                  --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
                 if [[ -n "$artifact_id" ]]; then
                   exit 0
                 fi
@@ -248,7 +247,7 @@ jobs:
           gh run view "$run_id" --repo "$REPOSITORY" --json jobs --jq '.jobs[] | select(.name == "Build ARM64 image once on branch") | .conclusion' | rg -q '^success$'
           artifact_name="litellm-image-$pr_head_sha"
           artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
-            --jq --arg name "$artifact_name" ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
+            --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
           test -n "$artifact_id"
           {
             echo "number=$pr_number"
