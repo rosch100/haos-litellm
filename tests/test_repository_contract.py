@@ -65,7 +65,10 @@ class RepositoryContractTests(unittest.TestCase):
     def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
         self.assertIsNone(manifest["ports"]["4000/tcp"])
-        self.assertEqual(manifest["map"], ["app_config:ro"])
+        self.assertEqual(
+            manifest["map"],
+            ["app_config:ro", {"type": "addon_config", "read_only": True}],
+        )
 
     def test_database_and_master_key_are_required_secrets(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
