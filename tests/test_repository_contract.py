@@ -81,6 +81,10 @@ class RepositoryContractTests(unittest.TestCase):
             'pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"',
             dockerfile,
         )
+        self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
+        self.assertIn(
+            "prisma generate --schema=litellm/proxy/schema.prisma", dockerfile
+        )
         self.assertIn(
             'sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml',
             dockerfile,
@@ -138,7 +142,12 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(
             'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
         )
-        self.assertIn('select(.name == "Build ARM64 image once on branch")', workflow)
+        self.assertIn(
+            'select(.name == "Build ARM64 image once on branch" and .conclusion == "success")',
+            workflow,
+        )
+        self.assertIn("grep -Fqx 'Build ARM64 image once on branch'", workflow)
+        self.assertNotIn("| rg -q", workflow)
         self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertNotIn(

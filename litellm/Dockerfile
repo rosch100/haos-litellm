@@ -10,6 +10,7 @@ ENV LANG=C.UTF-8 \
     LITELLM_SOURCE_COMMIT=80b9556dd312d18c535ae06884faa97d1fdb8f46 \
     LITELLM_SOURCE_TAG=v1.105.0 \
     CARGO_BUILD_JOBS=2 \
+    PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
 
