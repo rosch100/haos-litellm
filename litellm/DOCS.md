@@ -28,7 +28,9 @@ Automatic startup will not migrate the schema. Apply required migrations deliber
 
 No tunnel software or network route is installed by this app. PostgreSQL must be reachable through the network routing configured by the Home Assistant host. Allow access only from appropriate application networks and keep the database off public interfaces.
 
-LiteLLM listens on container port 4000, published as host port 4000. Open the web interface at `http://<HOME_ASSISTANT_LAN_IP>:4000/ui`; the LiteLLM API is available on the same host port. The Home Assistant host firewall and LAN segmentation control which devices can reach this port. Do not create router port-forwarding or otherwise expose it to the public Internet: the port includes the administrative web UI and API, and the UI does not provide TLS on its own. For access beyond a trusted LAN, use a separately secured TLS-terminating reverse proxy or private network path. The PostgreSQL port remains unpublished. Validate health (`/health/liveliness`) and authenticated API behavior.
+LiteLLM listens on container port 4000, published as host port 4000. The Home Assistant host firewall and LAN segmentation control which devices can reach this port. Do not create router port-forwarding or otherwise expose it to the public Internet: the port includes the administrative web UI and API. The PostgreSQL port remains unpublished. Validate health (`/health/liveliness`) and authenticated API behavior.
+
+Home Assistant can serve this port over HTTPS directly using its managed SSL certificates. Enable the app's `ssl` option to make LiteLLM read-only mount `/ssl/fullchain.pem` and `/ssl/privkey.pem` and terminate TLS on port 4000. Then open `https://<HOME_ASSISTANT_HOST>:4000/ui`. Keep `ssl` disabled when connecting through an HTTPS reverse proxy that terminates TLS and forwards plain HTTP to the app. The app defaults to HTTP to preserve existing installations until SSL is explicitly enabled.
 
 ## Health and diagnostics
 

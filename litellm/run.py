@@ -21,7 +21,33 @@ EXPECTED_SCHEMA_SHA256 = (
     "a17e69687d14d78dc7cee49770f1c1e8b2726cd8823d37c6dff48ae151533342"
 )
 OPTIONS_FILE = Path("/data/options.json")
+SSL_CERTIFICATE = Path("/ssl/fullchain.pem")
+SSL_PRIVATE_KEY = Path("/ssl/privkey.pem")
 ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def build_litellm_command(config_path: Path, options: dict[str, object]) -> list[str]:
+    command = [
+        "/opt/litellm-venv/bin/litellm",
+        "--config",
+        str(config_path),
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "4000",
+    ]
+    if options.get("ssl", False):
+        if not SSL_CERTIFICATE.is_file() or not SSL_PRIVATE_KEY.is_file():
+            fail("ssl=true requires /ssl/fullchain.pem and /ssl/privkey.pem")
+        command.extend(
+            [
+                "--ssl_certfile_path",
+                str(SSL_CERTIFICATE),
+                "--ssl_keyfile_path",
+                str(SSL_PRIVATE_KEY),
+            ]
+        )
+    return command
 
 
 def fail(message: str) -> None:
@@ -182,6 +208,7 @@ def main() -> None:
     environment["LITELLM_MASTER_KEY"] = master_key
     environment["DISABLE_ADMIN_UI"] = "False"
     environment["STORE_MODEL_IN_DB"] = "true"
+    command = build_litellm_command(runtime_config, options)
 
     salt_key = options.get("salt_key")
     if salt_key is not None:
@@ -196,19 +223,7 @@ def main() -> None:
         f"{database_host}:{database_port}; schema migrations disabled and Admin UI enabled",
         flush=True,
     )
-    os.execvpe(
-        "/opt/litellm-venv/bin/litellm",
-        [
-            "litellm",
-            "--config",
-            str(runtime_config),
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "4000",
-        ],
-        environment,
-    )
+    os.execvpe(command[0], command, environment)
 
 
 if __name__ == "__main__":
