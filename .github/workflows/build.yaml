@@ -167,7 +167,10 @@ jobs:
           SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           for _ in {1..210}; do
-            while IFS=$'\t' read -r run_id status conclusion; do
+            build_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs?branch=$PR_BRANCH&event=push&per_page=100" \
+              | jq -r --arg sha "$PR_HEAD_SHA" '.workflow_runs | map(select(.head_sha == $sha and .path == ".github/workflows/build.yaml")) | sort_by(.id) | if length == 0 then empty else last | [.id, .status, (.conclusion // "")] | @tsv end')"
+            if [[ -n "$build_run" ]]; then
+              IFS=$'\t' read -r run_id status conclusion <<< "$build_run"
               if [[ "$status" == completed && "$conclusion" == success ]]; then
                 artifact_name="litellm-image-$PR_HEAD_SHA"
                 artifact_id="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$run_id/artifacts" \
@@ -175,16 +178,11 @@ jobs:
                 if [[ -n "$artifact_id" ]]; then
                   exit 0
                 fi
-              fi
-              if [[ "$status" == completed && "$conclusion" != success ]]; then
+              elif [[ "$status" == completed && "$conclusion" != success ]]; then
                 echo "The branch image build for $PR_HEAD_SHA ended with $conclusion" >&2
                 exit 1
               fi
-            done < <(
-              gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push --branch "$PR_BRANCH" \
-                --json databaseId,headSha,status,conclusion --limit 100 \
-                | jq -r --arg sha "$PR_HEAD_SHA" '[.[] | select(.headSha == $sha)] | sort_by(.databaseId) | reverse | .[] | [.databaseId, .status, (.conclusion // "")] | @tsv'
-            )
+            fi
             sleep 10
           done
           echo "No successful branch image build with provenance found for $PR_HEAD_SHA" >&2
