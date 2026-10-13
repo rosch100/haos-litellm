@@ -321,7 +321,7 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq .id 2>/dev/null || true)"
+          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq '.id // empty' 2>/dev/null || true)"
           if [[ -n "$release_id" ]]; then
             echo "GitHub release $VERSION already exists"
             exit 0

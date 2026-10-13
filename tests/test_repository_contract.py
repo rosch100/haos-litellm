@@ -161,6 +161,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("needs: promote", workflow)
         self.assertIn("repos/$REPOSITORY/releases/tags/$VERSION", workflow)
+        self.assertIn("--jq '.id // empty'", workflow)
         self.assertIn('"tag_name=$VERSION"', workflow)
         self.assertIn('"name=LiteLLM $VERSION"', workflow)
         self.assertIn('test "$version" = "$litellm_version"', workflow)
