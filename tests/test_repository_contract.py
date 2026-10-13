@@ -107,8 +107,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("push: true", workflow)
         self.assertIn("if: github.event_name == 'push'", workflow)
         self.assertIn("actions/runs?branch=$PR_BRANCH&event=push&per_page=100", workflow)
-        self.assertIn("select(.head_sha == $sha and .path ==", workflow)
         self.assertIn("if length == 0 then empty else last", workflow)
+        self.assertIn("timeout-minutes: 60", workflow)
+        self.assertIn("for _ in {1..330}; do", workflow)
         self.assertIn('      - "**"', workflow)
         self.assertIn('      - "scripts/**"', workflow.split("  push:", 1)[1])
         push_paths = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
@@ -136,7 +137,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(
             'actions/runs?branch=$PR_BRANCH&event=push&per_page=100', workflow
         )
-        self.assertIn('select(.head_sha == $sha and .path ==', workflow)
+        self.assertIn(
+            '.head_sha == $sha and .event == "push" and .path ==', workflow
+        )
         self.assertNotIn("--jq --arg", workflow)
         self.assertIn(
             'gh run list --repo "$REPOSITORY" --workflow build.yaml --event push',
