@@ -321,14 +321,28 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq '.id // empty' 2>/dev/null || true)"
-          if [[ -n "$release_id" ]]; then
-            echo "GitHub release $VERSION already exists"
-            exit 0
+          releases_endpoint="repos/$REPOSITORY/releases?per_page=100"
+          release="$(gh api --paginate --slurp "$releases_endpoint" \
+            | jq -c --arg version "$VERSION" '[.[][] | select(.tag_name == $version)] | .[0] // empty')"
+          if [[ -n "$release" ]]; then
+            release_id="$(jq -r '.id' <<< "$release")"
+            if [[ "$(jq -r '.draft' <<< "$release")" == "true" ]]; then
+              gh api "repos/$REPOSITORY/releases/$release_id" \
+                --method PATCH \
+                --field draft=false \
+                --field "name=LiteLLM $VERSION"
+            else
+              echo "Published GitHub release $VERSION already exists"
+            fi
+          else
+            gh api "repos/$REPOSITORY/releases" \
+              --method POST \
+              --field "tag_name=$VERSION" \
+              --field "target_commitish=$GITHUB_SHA" \
+              --field "name=LiteLLM $VERSION" \
+              --field generate_release_notes=true
           fi
-          gh api "repos/$REPOSITORY/releases" \
-            --method POST \
-            --field "tag_name=$VERSION" \
-            --field "target_commitish=$GITHUB_SHA" \
-            --field "name=LiteLLM $VERSION" \
-            --field generate_release_notes=true
+          release="$(gh api --paginate --slurp "$releases_endpoint" \
+            | jq -c --arg version "$VERSION" '[.[][] | select(.tag_name == $version and .draft == false)] | .[0] // empty')"
+          test -n "$release"
+          echo "Verified published GitHub release $VERSION"
