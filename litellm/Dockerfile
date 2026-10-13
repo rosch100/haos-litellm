@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml && \
     /opt/litellm-venv/bin/pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]" && \
     cd /tmp/litellm-source && \
-    python3 -c 'from pathlib import Path; path = Path("litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
+    python3 -c 'from pathlib import Path; path = Path("litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}\", \"{target}"))' && \
     grep -Fq '"linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
     grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/prisma generate --schema=litellm/proxy/schema.prisma && \

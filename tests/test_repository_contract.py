@@ -61,7 +61,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("openssl", dockerfile)
         self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
         self.assertIn('target = "linux-musl-arm64-openssl-3.0.x"', dockerfile)
-        self.assertIn("schema.replace(source, f\"{source}, {target}\")", dockerfile)
+        self.assertIn(
+            'schema.replace(source, f"{source}\\\", \\\"{target}")', dockerfile
+        )
         self.assertIn("from prisma import client", dockerfile)
         self.assertIn("from prisma.engine.utils import ensure", dockerfile)
         self.assertIn("ensure(client.BINARY_PATHS.query_engine)", dockerfile)
@@ -104,6 +106,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('      - "repository.yaml"', workflow)
         self.assertIn("push: true", workflow)
         self.assertIn("if: github.event_name == 'push'", workflow)
+        self.assertIn("actions/runs?branch=$PR_BRANCH&event=push&per_page=100", workflow)
+        self.assertIn("select(.head_sha == $sha and .path ==", workflow)
+        self.assertIn("if length == 0 then empty else last", workflow)
         self.assertIn('      - "**"', workflow)
         self.assertIn('      - "scripts/**"', workflow.split("  push:", 1)[1])
         push_paths = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
@@ -129,9 +134,9 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("if: github.event_name == 'pull_request'", workflow)
         self.assertIn(
-            'gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push',
-            workflow,
+            'actions/runs?branch=$PR_BRANCH&event=push&per_page=100', workflow
         )
+        self.assertIn('select(.head_sha == $sha and .path ==', workflow)
         self.assertNotIn("--jq --arg", workflow)
         self.assertIn(
             'gh run list --repo "$REPOSITORY" --workflow build.yaml --event push',
