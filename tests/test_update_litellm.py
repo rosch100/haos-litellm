@@ -83,7 +83,42 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
             self.assertIn("LITELLM_SOURCE_TAG=v1.106.0", dockerfile)
             self.assertIn('EXPECTED_LITELLM_VERSION = "1.106.0"', runtime)
             self.assertIn('"' + "d" * 64 + '"', runtime)
-            self.assertIn('version: "1.106.0"', manifest)
+            self.assertIn('version: "1.106.0.1"', manifest)
+            self.assertFalse(update_litellm.update_repository(root, release))
+
+    def test_same_upstream_release_increments_custom_app_revision(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / "litellm").mkdir()
+            (root / "litellm/Dockerfile").write_text(
+                "ENV LANG=C.UTF-8 \\\n"
+                "    LITELLM_VERSION=1.105.0 \\\n"
+                "    LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git \\\n"
+                "    LITELLM_SOURCE_COMMIT=" + "a" * 40 + " \\\n"
+                "    LITELLM_SOURCE_TAG=v1.105.0 \\\n"
+                "    CARGO_BUILD_JOBS=2\n"
+            )
+            (root / "litellm/run.py").write_text(
+                'EXPECTED_LITELLM_VERSION = "1.105.0"\n'
+                'EXPECTED_SCHEMA_SHA256 = (\n    "' + "c" * 64 + '"\n)\n'
+            )
+            (root / "litellm/config.yaml").write_text(
+                'version: "1.105.0.4"\n'
+            )
+            release = update_litellm.LiteLLMRelease(
+                tag="v1.105.0",
+                version="1.105.0",
+                commit="b" * 40,
+                schema_sha256="d" * 64,
+            )
+
+            self.assertTrue(update_litellm.update_repository(root, release))
+            manifest = (root / "litellm/config.yaml").read_text()
+            self.assertIn('version: "1.105.0.5"', manifest)
+            self.assertIn(
+                "LITELLM_SOURCE_COMMIT=" + "b" * 40,
+                (root / "litellm/Dockerfile").read_text(),
+            )
             self.assertFalse(update_litellm.update_repository(root, release))
 
     def test_equal_upstream_version_repairs_old_fork_commit_and_schema_pins(self):
@@ -102,7 +137,7 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
                 'EXPECTED_LITELLM_VERSION = "1.105.0"\n'
                 'EXPECTED_SCHEMA_SHA256 = (\n    "' + "c" * 64 + '"\n)\n'
             )
-            (root / "litellm/config.yaml").write_text('version: "1.105.0"\n')
+            (root / "litellm/config.yaml").write_text('version: "1.105.0.1"\n')
             release = update_litellm.LiteLLMRelease(
                 tag="v1.105.0",
                 version="1.105.0",
@@ -111,6 +146,10 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
             )
 
             self.assertTrue(update_litellm.update_repository(root, release))
+            self.assertIn(
+                'version: "1.105.0.2"',
+                (root / "litellm/config.yaml").read_text(),
+            )
             self.assertIn(
                 "LITELLM_SOURCE_COMMIT=" + "b" * 40,
                 (root / "litellm/Dockerfile").read_text(),

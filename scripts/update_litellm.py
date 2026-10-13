@@ -16,6 +16,10 @@ UPSTREAM_API = "https://api.github.com/repos/BerriAI/litellm"
 UPSTREAM_RAW = "https://raw.githubusercontent.com/BerriAI/litellm"
 SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+APP_VERSION = re.compile(
+    r"^(?P<upstream>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"
+    r"(?:\.(?P<revision>[1-9]\d*))?$"
+)
 USER_AGENT = "haos-litellm-release-updater"
 
 
@@ -129,15 +133,36 @@ def update_repository(root: Path, release: LiteLLMRelease) -> bool:
     if not all((version_match, commit_match, tag_match, schema_match, manifest_match)):
         raise ValueError("Unable to read all LiteLLM release pins from the repository")
 
+    current_app_version = APP_VERSION.fullmatch(manifest_match.group(1))
+    if current_app_version is None:
+        raise ValueError(
+            "Expected app version to be an upstream LiteLLM version with an optional "
+            "'.<revision>' suffix"
+        )
+    if current_app_version.group("upstream") != version_match.group(1):
+        raise ValueError(
+            "HA app version does not match the pinned LiteLLM upstream version"
+        )
+
     current_version = _parse_version(version_match.group(1))
     if release_version < current_version:
         return False
-    if (
-        release_version == current_version
-        and commit_match.group(1) == release.commit
+    current_revision = int(current_app_version.group("revision") or "0")
+    upstream_pins_match = (
+        commit_match.group(1) == release.commit
         and tag_match.group(1) == release.tag
         and schema_match.group(1) == release.schema_sha256
-        and manifest_match.group(1) == release.version
+    )
+    if release_version > current_version:
+        app_version = f"{release.version}.1"
+    elif not upstream_pins_match or current_revision == 0:
+        app_version = f"{release.version}.{current_revision + 1}"
+    else:
+        app_version = manifest_match.group(1)
+    if (
+        release_version == current_version
+        and upstream_pins_match
+        and manifest_match.group(1) == app_version
     ):
         return False
 
@@ -174,7 +199,7 @@ def update_repository(root: Path, release: LiteLLMRelease) -> bool:
     updated_config = _replace_once(
         config,
         r'(?m)^(version:\s*")[^"]+("\s*)$',
-        rf"\g<1>{release.version}\2",
+        rf"\g<1>{app_version}\2",
         config_path,
     )
 
