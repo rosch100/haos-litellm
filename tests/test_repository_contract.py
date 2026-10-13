@@ -150,18 +150,22 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertIn("sha-${{ github.sha }}", workflow)
         self.assertIn(
-            'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
-        )
-        self.assertIn(
             'select(.name == "Build ARM64 image once on branch" and .conclusion == "success")',
             workflow,
         )
         self.assertIn("grep -Fqx 'Build ARM64 image once on branch'", workflow)
         self.assertNotIn("| rg -q", workflow)
-        self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
-        self.assertIn("docker buildx imagetools create", workflow)
-        self.assertNotIn(
-            "docker/build-push-action", workflow[workflow.index("  promote:") :]
+        self.assertIn(
+            "No successful branch image artifact is available", workflow
+        )
+        self.assertIn(
+            "Build ARM64 image from merged main commit when branch artifact is unavailable",
+            workflow,
+        )
+        self.assertIn("docker/setup-qemu-action@", workflow)
+        self.assertIn(
+            "SOURCE_DIGEST: ${{ steps.image.outputs.digest || steps.fallback_digest.outputs.digest }}",
+            workflow,
         )
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("needs: promote", workflow)
