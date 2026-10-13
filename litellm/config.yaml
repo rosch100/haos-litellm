@@ -12,19 +12,23 @@ ports:
   4000/tcp: 4000
 ports_description:
   4000/tcp: LiteLLM Web UI and API; keep this port on trusted LANs and do not forward it from the Internet
+map:
+  - type: addon_config
+    read_only: true
+  - type: ssl
+    read_only: true
 options:
   database_url: null
   master_key: null
+  ssl: false
   config_file: /config/litellm.yaml
   environment_variables: []
 schema:
   database_url: password
   master_key: password
+  ssl: bool
   salt_key: password?
   config_file: str
   environment_variables:
     - name: str
       value: password
-map:
-  - type: addon_config
-    read_only: true

@@ -9,7 +9,7 @@ A configurable ARM64 Home Assistant App for the LiteLLM AI Gateway. Database con
 3. Install the `LiteLLM` app.
 4. Open the app's **Configuration** tab and set the required values described in [`litellm/DOCS.md`](litellm/DOCS.md).
 
-The app supports ARM64 (`aarch64`). Its LiteLLM Web UI and API are available on the Home Assistant host at `http://<HOME_ASSISTANT_LAN_IP>:4000/ui` and port 4000 respectively. Keep this port restricted to trusted LAN devices and do not forward it from the public Internet; it includes the administrative UI and does not provide TLS. The PostgreSQL port is not published.
+The app supports ARM64 (`aarch64`). Its LiteLLM Web UI and API are available on the Home Assistant host at port 4000. Set the app's `ssl` option to enable HTTPS at `https://<HOME_ASSISTANT_HOST>:4000/ui` using Home Assistant's managed certificate; otherwise use `http://<HOME_ASSISTANT_LAN_IP>:4000/ui`. Keep this port restricted to trusted devices and do not forward it from the public Internet; it includes the administrative UI. The PostgreSQL port is not published.
 
 ## Configuration
 
