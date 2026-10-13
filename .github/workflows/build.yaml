@@ -166,9 +166,9 @@ jobs:
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          for _ in {1..210}; do
+          for _ in {1..330}; do
             build_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs?branch=$PR_BRANCH&event=push&per_page=100" \
-              | jq -r --arg sha "$PR_HEAD_SHA" '.workflow_runs | map(select(.head_sha == $sha and .path == ".github/workflows/build.yaml")) | sort_by(.id) | if length == 0 then empty else last | [.id, .status, (.conclusion // "")] | @tsv end')"
+              | jq -r --arg sha "$PR_HEAD_SHA" '.workflow_runs | map(select(.head_sha == $sha and .event == "push" and .path == ".github/workflows/build.yaml")) | sort_by(.id) | if length == 0 then empty else last | [.id, .status, (.conclusion // "")] | @tsv end')"
             if [[ -n "$build_run" ]]; then
               IFS=$'\t' read -r run_id status conclusion <<< "$build_run"
               if [[ "$status" == completed && "$conclusion" == success ]]; then
@@ -321,7 +321,7 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq .id 2>/dev/null || true)"
+          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq '.id // empty' 2>/dev/null || true)"
           if [[ -n "$release_id" ]]; then
             echo "GitHub release $VERSION already exists"
             exit 0
