@@ -1,5 +1,5 @@
 name: LiteLLM
-version: "1.105.0"
+version: "1.105.0.2"
 slug: litellm
 description: Configurable LiteLLM AI Gateway
 url: https://github.com/rosch100/haos-litellm
@@ -9,9 +9,9 @@ arch:
 init: false
 startup: services
 ports:
-  4000/tcp: null
+  4000/tcp: 4000
 ports_description:
-  4000/tcp: LiteLLM API; leave unpublished and configure a trusted reverse proxy if external access is required
+  4000/tcp: LiteLLM Web UI and API; keep this port on trusted LANs and do not forward it from the Internet
 options:
   database_url: null
   master_key: null

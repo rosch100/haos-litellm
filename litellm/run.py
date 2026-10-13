@@ -180,7 +180,7 @@ def main() -> None:
     environment = os.environ.copy()
     environment["DATABASE_URL"] = database_url
     environment["LITELLM_MASTER_KEY"] = master_key
-    environment["DISABLE_ADMIN_UI"] = "true"
+    environment["DISABLE_ADMIN_UI"] = "False"
     environment["STORE_MODEL_IN_DB"] = "true"
 
     salt_key = options.get("salt_key")
@@ -193,7 +193,7 @@ def main() -> None:
     wait_for_database(database_host, database_port)
     print(
         f"[LiteLLM HA app] Starting LiteLLM {EXPECTED_LITELLM_VERSION} against "
-        f"{database_host}:{database_port}; schema migrations disabled and Admin UI disabled",
+        f"{database_host}:{database_port}; schema migrations disabled and Admin UI enabled",
         flush=True,
     )
     os.execvpe(
