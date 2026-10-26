@@ -21,12 +21,12 @@ jobs:
       pull-requests: write
     steps:
       - name: Check out main
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: main
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6.0.0
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
         with:
           python-version: "3.x"
       - name: Prepare update from latest official LiteLLM release
@@ -43,7 +43,7 @@ jobs:
           fi
       - name: Create or update release PR
         if: steps.update.outputs.updated == 'true'
-        uses: peter-evans/create-pull-request@v8.0.0
+        uses: peter-evans/create-pull-request@98357b18bf14b5342f975ff684046ec3b2a07725
         with:
           token: ${{ secrets.LITELLM_UPDATE_TOKEN }}
           add-paths: |
