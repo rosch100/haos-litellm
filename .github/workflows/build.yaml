@@ -208,7 +208,7 @@ jobs:
       - name: Set up GitHub CLI
         run: sudo apt-get update && sudo apt-get install --yes gh jq
       - name: Set up QEMU for ARM64 fallback builds
-        uses: docker/setup-qemu-action@v4.0.0
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
       - name: Log in to GitHub Container Registry
@@ -285,7 +285,7 @@ jobs:
       - name: Build ARM64 image from merged main commit when branch artifact is unavailable
         id: fallback_image
         if: steps.source.outputs.promoted == 'true' && steps.source.outputs.artifact_id == ''
-        uses: docker/build-push-action@v7.0.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294
         with:
           context: ./litellm
           platforms: linux/arm64
