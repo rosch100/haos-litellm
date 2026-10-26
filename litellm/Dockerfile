@@ -14,6 +14,7 @@ ENV LANG=C.UTF-8 \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja libsndfile openssl
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
@@ -28,11 +29,10 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     prisma_cache_dir="$(python3 -c 'import os; print(os.environ["PRISMA_BINARY_CACHE_DIR"])')" && \
     mkdir -p "$prisma_cache_dir" && \
     ln -s "$prisma_cache_dir" /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries && \
-    cd /tmp/litellm-source && \
-    python3 -c 'from pathlib import Path; path = Path("litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
-    grep -Fq '"linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
-    grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
-    /opt/litellm-venv/bin/prisma generate --schema=litellm/proxy/schema.prisma && \
+    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
+    grep -Fq '"linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
+    grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
+    /opt/litellm-venv/bin/prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/python -c 'from prisma import client, config; config.binary_platform = "linux-musl-arm64-openssl-3.0.x"; from prisma.engine.utils import ensure; ensure(client.BINARY_PATHS.query_engine)' && \
     rm -rf /tmp/litellm-source
 

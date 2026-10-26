@@ -83,7 +83,8 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
-            "prisma generate --schema=litellm/proxy/schema.prisma", dockerfile
+            "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma",
+            dockerfile,
         )
         self.assertIn(
             'sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml',
