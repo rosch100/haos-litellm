@@ -86,6 +86,10 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
+            "rm -rf /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries",
+            dockerfile,
+        )
+        self.assertIn(
             "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma", dockerfile
         )
         self.assertIn(
