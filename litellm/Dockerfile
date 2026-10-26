@@ -28,6 +28,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     /opt/litellm-venv/bin/pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]" && \
     prisma_cache_dir="$(python3 -c 'import os; print(os.environ["PRISMA_BINARY_CACHE_DIR"])')" && \
     mkdir -p "$prisma_cache_dir" && \
+    rm -rf /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries && \
     ln -s "$prisma_cache_dir" /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries && \
     python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
     grep -Fq '"linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
