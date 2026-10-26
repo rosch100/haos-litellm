@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -61,7 +62,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("openssl", dockerfile)
         self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
         self.assertIn('target = "linux-musl-arm64-openssl-3.0.x"', dockerfile)
-        self.assertIn("schema.replace(source, f\"{source}, {target}\")", dockerfile)
+        self.assertIn(
+            'schema.replace(source, f"{source}, {target}")', dockerfile
+        )
         self.assertIn("from prisma import client", dockerfile)
         self.assertIn("from prisma.engine.utils import ensure", dockerfile)
         self.assertIn("ensure(client.BINARY_PATHS.query_engine)", dockerfile)
@@ -83,8 +86,7 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
-            "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma",
-            dockerfile,
+            "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma", dockerfile
         )
         self.assertIn(
             'sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml',
@@ -106,6 +108,10 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('      - "repository.yaml"', workflow)
         self.assertIn("push: true", workflow)
         self.assertIn("if: github.event_name == 'push'", workflow)
+        self.assertIn("actions/runs?branch=$PR_BRANCH&event=push&per_page=100", workflow)
+        self.assertIn("if length == 0 then empty else last", workflow)
+        self.assertIn("timeout-minutes: 60", workflow)
+        self.assertIn("for _ in {1..330}; do", workflow)
         self.assertIn('      - "**"', workflow)
         self.assertIn('      - "scripts/**"', workflow.split("  push:", 1)[1])
         push_paths = workflow.split("  push:", 1)[1].split("  pull_request:", 1)[0]
@@ -131,8 +137,10 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("if: github.event_name == 'pull_request'", workflow)
         self.assertIn(
-            'gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push',
-            workflow,
+            'actions/runs?branch=$PR_BRANCH&event=push&per_page=100', workflow
+        )
+        self.assertIn(
+            '.head_sha == $sha and .event == "push" and .path ==', workflow
         )
         self.assertNotIn("--jq --arg", workflow)
         self.assertIn(
@@ -142,22 +150,31 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertIn("sha-${{ github.sha }}", workflow)
         self.assertIn(
-            'gh run view "$run_id" --repo "$REPOSITORY" --json headSha', workflow
-        )
-        self.assertIn(
             'select(.name == "Build ARM64 image once on branch" and .conclusion == "success")',
             workflow,
         )
         self.assertIn("grep -Fqx 'Build ARM64 image once on branch'", workflow)
         self.assertNotIn("| rg -q", workflow)
-        self.assertIn("SOURCE_DIGEST: ${{ steps.image.outputs.digest }}", workflow)
-        self.assertIn("docker buildx imagetools create", workflow)
-        self.assertNotIn(
-            "docker/build-push-action", workflow[workflow.index("  promote:") :]
+        self.assertIn(
+            "No successful branch image artifact is available", workflow
+        )
+        self.assertIn(
+            "Build ARM64 image from merged main commit when branch artifact is unavailable",
+            workflow,
+        )
+        self.assertIn("docker/setup-qemu-action@", workflow)
+        self.assertIn(
+            "SOURCE_DIGEST: ${{ steps.image.outputs.digest || steps.fallback_digest.outputs.digest }}",
+            workflow,
         )
         self.assertIn("actions/upload-artifact@", workflow)
         self.assertIn("needs: promote", workflow)
-        self.assertIn("repos/$REPOSITORY/releases/tags/$VERSION", workflow)
+        self.assertIn('releases_endpoint="repos/$REPOSITORY/releases?per_page=100"', workflow)
+        self.assertIn('gh api --paginate --slurp "$releases_endpoint"', workflow)
+        self.assertIn("select(.tag_name == $version)", workflow)
+        self.assertIn('select(.tag_name == $version and .draft == false)', workflow)
+        self.assertIn('--method PATCH', workflow)
+        self.assertIn('test -n "$release"', workflow)
         self.assertIn('"tag_name=$VERSION"', workflow)
         self.assertIn('"name=LiteLLM $VERSION"', workflow)
         self.assertIn('test "${app_version%-ha.*}" = "$litellm_version"', workflow)
@@ -174,8 +191,56 @@ class RepositoryContractTests(unittest.TestCase):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
         self.assertEqual(manifest["ports"]["4000/tcp"], 4000)
         self.assertFalse(manifest.get("ingress", False))
-        self.assertEqual(manifest["map"], [{"type": "addon_config", "read_only": True}])
+        self.assertEqual(
+            manifest["map"],
+            [
+                {"type": "addon_config", "read_only": True},
+                {"type": "ssl", "read_only": True},
+            ],
+        )
         self.assertIn("LAN", manifest["ports_description"]["4000/tcp"])
+
+    def test_https_is_available_when_ssl_is_enabled(self):
+        manifest = yaml.safe_load((APP / "config.yaml").read_text())
+        self.assertFalse(manifest["options"]["ssl"])
+        self.assertEqual(manifest["schema"]["ssl"], "bool")
+        self.assertIn({"type": "ssl", "read_only": True}, manifest["map"])
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            certificate = root / "fullchain.pem"
+            private_key = root / "privkey.pem"
+            certificate.write_text("certificate")
+            private_key.write_text("private key")
+            with (
+                patch.object(run, "SSL_CERTIFICATE", certificate),
+                patch.object(run, "SSL_PRIVATE_KEY", private_key),
+            ):
+                command = run.build_litellm_command(root / "config.yaml", {"ssl": True})
+
+        self.assertEqual(
+            command[-4:],
+            [
+                "--ssl_certfile_path",
+                str(certificate),
+                "--ssl_keyfile_path",
+                str(private_key),
+            ],
+        )
+        http_command = run.build_litellm_command(
+            root / "config.yaml", {"ssl": False}
+        )
+        self.assertEqual(http_command[-4:], ["--host", "0.0.0.0", "--port", "4000"])
+        self.assertNotIn("--ssl_certfile_path", http_command)
+        with (
+            patch.object(run, "SSL_CERTIFICATE", root / "missing-cert.pem"),
+            patch.object(run, "SSL_PRIVATE_KEY", root / "missing-key.pem"),
+        ):
+            with patch.object(run, "fail", side_effect=ValueError) as fail:
+                with self.assertRaises(ValueError):
+                    run.build_litellm_command(root / "config.yaml", {"ssl": True})
+        fail.assert_called_once_with(
+            "ssl=true requires /ssl/fullchain.pem and /ssl/privkey.pem"
+        )
 
     def test_web_ui_is_enabled_for_direct_lan_access(self):
         entrypoint = (APP / "run.py").read_text()

@@ -166,8 +166,11 @@ jobs:
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          for _ in {1..210}; do
-            while IFS=$'\t' read -r run_id status conclusion; do
+          for _ in {1..330}; do
+            build_run="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs?branch=$PR_BRANCH&event=push&per_page=100" \
+              | jq -r --arg sha "$PR_HEAD_SHA" '.workflow_runs | map(select(.head_sha == $sha and .event == "push" and .path == ".github/workflows/build.yaml")) | sort_by(.id) | if length == 0 then empty else last | [.id, .status, (.conclusion // "")] | @tsv end')"
+            if [[ -n "$build_run" ]]; then
+              IFS=$'\t' read -r run_id status conclusion <<< "$build_run"
               if [[ "$status" == completed && "$conclusion" == success ]]; then
                 artifact_name="litellm-image-$PR_HEAD_SHA"
                 artifact_id="$(gh api "repos/$SOURCE_REPOSITORY/actions/runs/$run_id/artifacts" \
@@ -175,16 +178,11 @@ jobs:
                 if [[ -n "$artifact_id" ]]; then
                   exit 0
                 fi
-              fi
-              if [[ "$status" == completed && "$conclusion" != success ]]; then
+              elif [[ "$status" == completed && "$conclusion" != success ]]; then
                 echo "The branch image build for $PR_HEAD_SHA ended with $conclusion" >&2
                 exit 1
               fi
-            done < <(
-              gh run list --repo "$SOURCE_REPOSITORY" --workflow build.yaml --event push --branch "$PR_BRANCH" \
-                --json databaseId,headSha,status,conclusion --limit 100 \
-                | jq -r --arg sha "$PR_HEAD_SHA" '[.[] | select(.headSha == $sha)] | sort_by(.databaseId) | reverse | .[] | [.databaseId, .status, (.conclusion // "")] | @tsv'
-            )
+            fi
             sleep 10
           done
           echo "No successful branch image build with provenance found for $PR_HEAD_SHA" >&2
@@ -209,6 +207,8 @@ jobs:
           persist-credentials: false
       - name: Set up GitHub CLI
         run: sudo apt-get update && sudo apt-get install --yes gh jq
+      - name: Set up QEMU for ARM64 fallback builds
+        uses: docker/setup-qemu-action@v4.0.0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd
       - name: Log in to GitHub Container Registry
@@ -237,20 +237,28 @@ jobs:
           pr_head_sha="$(jq -r ".head_sha" <<< "$pull_request")"
           pr_branch="$(jq -r ".head_branch" <<< "$pull_request")"
           pr_repository="$(jq -r ".head_repository" <<< "$pull_request")"
-          test "$pr_repository" = "$REPOSITORY"
-          run_id="$(gh run list --repo "$REPOSITORY" --workflow build.yaml --event push --branch "$pr_branch" \
-            --json databaseId,headSha,conclusion --limit 100 \
-            | jq -r --arg sha "$pr_head_sha" '[.[] | select(.headSha == $sha and .conclusion == "success")] | sort_by(.databaseId) | reverse | .[0].databaseId // empty')"
-          test -n "$run_id"
-          built_sha="$(gh run view "$run_id" --repo "$REPOSITORY" --json headSha --jq .headSha)"
-          test "$built_sha" = "$pr_head_sha"
-          gh run view "$run_id" --repo "$REPOSITORY" --json jobs \
-            --jq '.jobs[] | select(.name == "Build ARM64 image once on branch" and .conclusion == "success") | .name' \
-            | grep -Fqx 'Build ARM64 image once on branch'
-          artifact_name="litellm-image-$pr_head_sha"
-          artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
-            --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
-          test -n "$artifact_id"
+          artifact_id=""
+          run_id=""
+          if [[ "$pr_repository" == "$REPOSITORY" ]]; then
+            run_id="$(gh run list --repo "$REPOSITORY" --workflow build.yaml --event push --branch "$pr_branch" \
+              --json databaseId,headSha,conclusion --limit 100 \
+              | jq -r --arg sha "$pr_head_sha" '[.[] | select(.headSha == $sha and .conclusion == "success")] | sort_by(.databaseId) | reverse | .[0].databaseId // empty')"
+            if [[ -n "$run_id" ]]; then
+              gh run view "$run_id" --repo "$REPOSITORY" --json jobs \
+                --jq '.jobs[] | select(.name == "Build ARM64 image once on branch" and .conclusion == "success") | .name' \
+                | grep -Fqx 'Build ARM64 image once on branch' || run_id=""
+            fi
+            if [[ -n "$run_id" ]]; then
+              artifact_name="litellm-image-$pr_head_sha"
+              artifact_id="$(gh api "repos/$REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq ".artifacts[] | select(.name == \"$artifact_name\" and .expired == false) | .id")"
+            fi
+          fi
+          if [[ -n "$artifact_id" ]]; then
+            echo "Using the verified ARM64 image built for PR #$pr_number ($pr_head_sha)."
+          else
+            echo "No successful branch image artifact is available for PR #$pr_number; building the merged main commit instead."
+          fi
           {
             echo "number=$pr_number"
             echo "head_sha=$pr_head_sha"
@@ -258,6 +266,7 @@ jobs:
             echo "artifact_id=$artifact_id"
           } >> "$GITHUB_OUTPUT"
       - name: Download image digest provenance
+        if: steps.source.outputs.promoted == 'true' && steps.source.outputs.artifact_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.source.outputs.artifact_id }}
@@ -268,12 +277,28 @@ jobs:
           unzip -q "$RUNNER_TEMP/litellm-image.zip" -d "$RUNNER_TEMP/litellm-image"
       - name: Read app version
         id: version
+        if: steps.source.outputs.promoted == 'true'
         run: |
           version="$(awk -F '"' '/^version:/ {print $2; exit}' litellm/config.yaml)"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-ha\.[1-9][0-9]*$ ]]
           echo "value=$version" >> "$GITHUB_OUTPUT"
-      - name: Verify image digest provenance
+      - name: Build ARM64 image from merged main commit when branch artifact is unavailable
+        id: fallback_image
+        if: steps.source.outputs.promoted == 'true' && steps.source.outputs.artifact_id == ''
+        uses: docker/build-push-action@v7.0.0
+        with:
+          context: ./litellm
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/rosch100/haos-litellm-litellm:sha-${{ github.sha }}
+          cache-from: type=gha,scope=litellm-main
+          cache-to: type=gha,mode=max,scope=litellm-main
+          build-args: |
+            BUILD_VERSION=${{ steps.version.outputs.value }}
+            BUILD_ARCH=aarch64
+      - name: Verify branch image digest provenance
         id: image
+        if: steps.source.outputs.promoted == 'true' && steps.source.outputs.artifact_id != ''
         env:
           PR_HEAD_SHA: ${{ steps.source.outputs.head_sha }}
           APP_VERSION: ${{ steps.version.outputs.value }}
@@ -288,10 +313,19 @@ jobs:
           digest="$(jq -r '.digest' "$IMAGE_METADATA")"
           [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Use digest from fallback build
+        id: fallback_digest
+        if: steps.source.outputs.promoted == 'true' && steps.source.outputs.artifact_id == ''
+        env:
+          IMAGE_DIGEST: ${{ steps.fallback_image.outputs.digest }}
+        run: |
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "digest=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
       - name: Retag the exact branch image as version and latest
+        if: steps.source.outputs.promoted == 'true'
         env:
           SOURCE_IMAGE: ghcr.io/rosch100/haos-litellm-litellm
-          SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
+          SOURCE_DIGEST: ${{ steps.image.outputs.digest || steps.fallback_digest.outputs.digest }}
           VERSION_TAG: ghcr.io/rosch100/haos-litellm-litellm:${{ steps.version.outputs.value }}
           LATEST_TAG: ghcr.io/rosch100/haos-litellm-litellm:latest
         run: docker buildx imagetools create --tag "$VERSION_TAG" --tag "$LATEST_TAG" "$SOURCE_IMAGE@$SOURCE_DIGEST"
@@ -323,14 +357,28 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          release_id="$(gh api "repos/$REPOSITORY/releases/tags/$VERSION" --jq .id 2>/dev/null || true)"
-          if [[ -n "$release_id" ]]; then
-            echo "GitHub release $VERSION already exists"
-            exit 0
+          releases_endpoint="repos/$REPOSITORY/releases?per_page=100"
+          release="$(gh api --paginate --slurp "$releases_endpoint" \
+            | jq -c --arg version "$VERSION" '[.[][] | select(.tag_name == $version)] | .[0] // empty')"
+          if [[ -n "$release" ]]; then
+            release_id="$(jq -r '.id' <<< "$release")"
+            if [[ "$(jq -r '.draft' <<< "$release")" == "true" ]]; then
+              gh api "repos/$REPOSITORY/releases/$release_id" \
+                --method PATCH \
+                --field draft=false \
+                --field "name=LiteLLM $VERSION"
+            else
+              echo "Published GitHub release $VERSION already exists"
+            fi
+          else
+            gh api "repos/$REPOSITORY/releases" \
+              --method POST \
+              --field "tag_name=$VERSION" \
+              --field "target_commitish=$GITHUB_SHA" \
+              --field "name=LiteLLM $VERSION" \
+              --field generate_release_notes=true
           fi
-          gh api "repos/$REPOSITORY/releases" \
-            --method POST \
-            --field "tag_name=$VERSION" \
-            --field "target_commitish=$GITHUB_SHA" \
-            --field "name=LiteLLM $VERSION" \
-            --field generate_release_notes=true
+          release="$(gh api --paginate --slurp "$releases_endpoint" \
+            | jq -c --arg version "$VERSION" '[.[][] | select(.tag_name == $version and .draft == false)] | .[0] // empty')"
+          test -n "$release"
+          echo "Verified published GitHub release $VERSION"

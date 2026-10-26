@@ -9,7 +9,7 @@ A configurable ARM64 Home Assistant App for the LiteLLM AI Gateway. Database con
 3. Install the `LiteLLM` app.
 4. Open the app's **Configuration** tab and set the required values described in [`litellm/DOCS.md`](litellm/DOCS.md).
 
-The app supports ARM64 (`aarch64`). Its LiteLLM Web UI and API are available on the Home Assistant host at `http://<HOME_ASSISTANT_LAN_IP>:4000/ui` and port 4000 respectively. Keep this port restricted to trusted LAN devices and do not forward it from the public Internet; it includes the administrative UI and does not provide TLS. The PostgreSQL port is not published.
+The app supports ARM64 (`aarch64`). Its LiteLLM Web UI and API are available on the Home Assistant host at port 4000. Set the app's `ssl` option to enable HTTPS at `https://<HOME_ASSISTANT_HOST>:4000/ui` using Home Assistant's managed certificate; otherwise use `http://<HOME_ASSISTANT_LAN_IP>:4000/ui`. Keep this port restricted to trusted devices and do not forward it from the public Internet; it includes the administrative UI. The PostgreSQL port is not published.
 
 ## Configuration
 
@@ -19,4 +19,5 @@ Protect app options, configuration files, and backups because they may contain c
 
 ## Build and verification
 
-The GitHub Actions workflow validates the app manifest and regression tests, then builds and publishes the ARM64 image to `ghcr.io/rosch100/haos-litellm-litellm`. App versions use `<LiteLLM-version>-ha.<revision>` (for example, `1.105.0-ha.1`) so Home Assistant can distinguish this app build from the upstream LiteLLM release. Increase the `ha` revision when publishing a custom app-only change against the same LiteLLM release. The updater resets it to `1` for a new upstream release and increments it when upstream pins need a same-release correction; the installed LiteLLM package remains pinned and checked against the plain upstream version.
+The app supports ARM64 (`aarch64`). Its LiteLLM Web UI and API are available on the Home Assistant host at port 4000. Set the app's `ssl` option to enable HTTPS at `https://<HOME_ASSISTANT_HOST>:4000/ui` using Home Assistant's managed certificate; otherwise use `http://<HOME_ASSISTANT_LAN_IP>:4000/ui`. Keep this port restricted to trusted devices and do not forward it from the public Internet; it includes the administrative UI. The PostgreSQL port is not published.
+The GitHub Actions workflow validates the app manifest with the official [`frenck/action-app-linter`](https://github.com/frenck/action-app-linter) GitHub Action and runs regression tests, then builds and publishes the ARM64 image to `ghcr.io/rosch100/haos-litellm-litellm`. App versions use `<LiteLLM-version>.<revision>` (for example, `1.105.0.2`) so Home Assistant can distinguish this app build from the upstream LiteLLM release while recognizing it as an update to the upstream version. Increase the final numeric revision when publishing a custom app-only change against the same LiteLLM release. The updater resets it to `1` for a new upstream release and increments it when upstream pins need a same-release correction; the installed LiteLLM package remains pinned and checked against the plain upstream version.
