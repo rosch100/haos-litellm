@@ -5,15 +5,16 @@ ARG BUILD_VERSION
 ARG BUILD_ARCH
 
 ENV LANG=C.UTF-8 \
-    LITELLM_VERSION=1.105.0 \
+    LITELLM_VERSION=1.106.4 \
     LITELLM_SOURCE_REPOSITORY=https://github.com/BerriAI/litellm.git \
-    LITELLM_SOURCE_COMMIT=80b9556dd312d18c535ae06884faa97d1fdb8f46 \
-    LITELLM_SOURCE_TAG=v1.105.0 \
+    LITELLM_SOURCE_COMMIT=ea7ca16dbc3904d9e59a9505f379a2ca3091821f \
+    LITELLM_SOURCE_TAG=v1.106.4 \
     CARGO_BUILD_JOBS=2 \
     PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma \
     PRISMA_CLI_QUERY_ENGINE_TYPE=binary \
     PATH="/opt/litellm-venv/bin:${PATH}"
 
+# hadolint ignore=DL3018
 RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja libsndfile openssl
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
@@ -25,11 +26,13 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     test "$(git -C /tmp/litellm-source describe --tags --exact-match "${LITELLM_SOURCE_COMMIT}")" = "${LITELLM_SOURCE_TAG}" && \
     sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml && \
     /opt/litellm-venv/bin/pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]" && \
-    cd /tmp/litellm-source && \
-    python3 -c 'from pathlib import Path; path = Path("litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}\", \"{target}"))' && \
-    grep -Fq '"linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
-    grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' litellm/proxy/schema.prisma && \
-    /opt/litellm-venv/bin/prisma generate --schema=litellm/proxy/schema.prisma && \
+    prisma_cache_dir="$(python3 -c 'import os; print(os.environ["PRISMA_BINARY_CACHE_DIR"])')" && \
+    mkdir -p "$prisma_cache_dir" && \
+    ln -s "$prisma_cache_dir" /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries && \
+    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
+    grep -Fq '"linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
+    grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
+    /opt/litellm-venv/bin/prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/python -c 'from prisma import client, config; config.binary_platform = "linux-musl-arm64-openssl-3.0.x"; from prisma.engine.utils import ensure; ensure(client.BINARY_PATHS.query_engine)' && \
     rm -rf /tmp/litellm-source
 

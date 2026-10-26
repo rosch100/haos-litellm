@@ -18,7 +18,7 @@ SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 APP_VERSION = re.compile(
     r"^(?P<upstream>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"
-    r"(?:\.(?P<revision>[1-9]\d*))?$"
+    r"(?:-ha\.(?P<revision>[1-9]\d*))?$"
 )
 USER_AGENT = "haos-litellm-release-updater"
 
@@ -137,7 +137,7 @@ def update_repository(root: Path, release: LiteLLMRelease) -> bool:
     if current_app_version is None:
         raise ValueError(
             "Expected app version to be an upstream LiteLLM version with an optional "
-            "'.<revision>' suffix"
+            "'-ha.<revision>' suffix"
         )
     if current_app_version.group("upstream") != version_match.group(1):
         raise ValueError(
@@ -154,9 +154,9 @@ def update_repository(root: Path, release: LiteLLMRelease) -> bool:
         and schema_match.group(1) == release.schema_sha256
     )
     if release_version > current_version:
-        app_version = f"{release.version}.1"
+        app_version = f"{release.version}-ha.1"
     elif not upstream_pins_match or current_revision == 0:
-        app_version = f"{release.version}.{current_revision + 1}"
+        app_version = f"{release.version}-ha.{current_revision + 1}"
     else:
         app_version = manifest_match.group(1)
     if (

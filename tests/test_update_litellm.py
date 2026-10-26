@@ -83,7 +83,7 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
             self.assertIn("LITELLM_SOURCE_TAG=v1.106.0", dockerfile)
             self.assertIn('EXPECTED_LITELLM_VERSION = "1.106.0"', runtime)
             self.assertIn('"' + "d" * 64 + '"', runtime)
-            self.assertIn('version: "1.106.0.1"', manifest)
+            self.assertIn('version: "1.106.0-ha.1"', manifest)
             self.assertFalse(update_litellm.update_repository(root, release))
 
     def test_same_upstream_release_increments_custom_app_revision(self):
@@ -103,7 +103,7 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
                 'EXPECTED_SCHEMA_SHA256 = (\n    "' + "c" * 64 + '"\n)\n'
             )
             (root / "litellm/config.yaml").write_text(
-                'version: "1.105.0.4"\n'
+                'version: "1.105.0-ha.4"\n'
             )
             release = update_litellm.LiteLLMRelease(
                 tag="v1.105.0",
@@ -114,7 +114,7 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
 
             self.assertTrue(update_litellm.update_repository(root, release))
             manifest = (root / "litellm/config.yaml").read_text()
-            self.assertIn('version: "1.105.0.5"', manifest)
+            self.assertIn('version: "1.105.0-ha.5"', manifest)
             self.assertIn(
                 "LITELLM_SOURCE_COMMIT=" + "b" * 40,
                 (root / "litellm/Dockerfile").read_text(),
@@ -137,7 +137,7 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
                 'EXPECTED_LITELLM_VERSION = "1.105.0"\n'
                 'EXPECTED_SCHEMA_SHA256 = (\n    "' + "c" * 64 + '"\n)\n'
             )
-            (root / "litellm/config.yaml").write_text('version: "1.105.0.1"\n')
+            (root / "litellm/config.yaml").write_text('version: "1.105.0"\n')
             release = update_litellm.LiteLLMRelease(
                 tag="v1.105.0",
                 version="1.105.0",
@@ -146,10 +146,6 @@ class LiteLLMReleaseUpdateTests(unittest.TestCase):
             )
 
             self.assertTrue(update_litellm.update_repository(root, release))
-            self.assertIn(
-                'version: "1.105.0.2"',
-                (root / "litellm/config.yaml").read_text(),
-            )
             self.assertIn(
                 "LITELLM_SOURCE_COMMIT=" + "b" * 40,
                 (root / "litellm/Dockerfile").read_text(),

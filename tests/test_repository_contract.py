@@ -63,7 +63,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
         self.assertIn('target = "linux-musl-arm64-openssl-3.0.x"', dockerfile)
         self.assertIn(
-            'schema.replace(source, f"{source}\\\", \\\"{target}")', dockerfile
+            'schema.replace(source, f"{source}, {target}")', dockerfile
         )
         self.assertIn("from prisma import client", dockerfile)
         self.assertIn("from prisma.engine.utils import ensure", dockerfile)
@@ -86,7 +86,7 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
-            "prisma generate --schema=litellm/proxy/schema.prisma", dockerfile
+            "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma", dockerfile
         )
         self.assertIn(
             'sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml',
@@ -100,8 +100,7 @@ class RepositoryContractTests(unittest.TestCase):
         dockerfile_version = dockerfile.split("LITELLM_VERSION=", 1)[1].split()[0]
         upstream_tag = dockerfile.split("LITELLM_SOURCE_TAG=", 1)[1].split()[0]
         upstream_version = upstream_tag[1:]
-        self.assertRegex(manifest_version, rf"^{upstream_version}\.[1-9][0-9]*$")
-        self.assertEqual(manifest_version, f"{upstream_version}.2")
+        self.assertRegex(manifest_version, rf"^{upstream_version}-ha\.[1-9][0-9]*$")
         self.assertEqual(run.EXPECTED_LITELLM_VERSION, upstream_version)
         self.assertEqual(run.EXPECTED_LITELLM_VERSION, dockerfile_version)
         self.assertIn("EXPECTED_SCHEMA_SHA256", (APP / "run.py").read_text())
@@ -178,7 +177,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('test -n "$release"', workflow)
         self.assertIn('"tag_name=$VERSION"', workflow)
         self.assertIn('"name=LiteLLM $VERSION"', workflow)
-        self.assertIn('test "${app_version%.*}" = "$litellm_version"', workflow)
+        self.assertIn('test "${app_version%-ha.*}" = "$litellm_version"', workflow)
         update_workflow = (ROOT / ".github/workflows/update-litellm.yaml").read_text()
         update_script = (ROOT / "scripts/update_litellm.py").read_text()
         self.assertIn('cron: "23 6 * * *"', update_workflow)

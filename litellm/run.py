@@ -16,9 +16,9 @@ import litellm
 import yaml
 from litellm.proxy.db.prisma_client import should_update_prisma_schema
 
-EXPECTED_LITELLM_VERSION = "1.105.0"
+EXPECTED_LITELLM_VERSION = "1.106.4"
 EXPECTED_SCHEMA_SHA256 = (
-    "a17e69687d14d78dc7cee49770f1c1e8b2726cd8823d37c6dff48ae151533342"
+    "1ed6fbff070ed7cdf2fa86f667d7b6eedd6a0be2d7036250a54cfe360de183db"
 )
 OPTIONS_FILE = Path("/data/options.json")
 SSL_CERTIFICATE = Path("/ssl/fullchain.pem")
