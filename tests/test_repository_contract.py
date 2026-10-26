@@ -96,8 +96,9 @@ class RepositoryContractTests(unittest.TestCase):
         manifest_version = manifest["version"]
         dockerfile_version = dockerfile.split("LITELLM_VERSION=", 1)[1].split()[0]
         upstream_tag = dockerfile.split("LITELLM_SOURCE_TAG=", 1)[1].split()[0]
-        self.assertEqual(manifest_version, upstream_tag[1:])
-        self.assertEqual(manifest_version, run.EXPECTED_LITELLM_VERSION)
+        upstream_version = upstream_tag[1:]
+        self.assertRegex(manifest_version, rf"^{upstream_version}-ha\.[1-9][0-9]*$")
+        self.assertEqual(run.EXPECTED_LITELLM_VERSION, upstream_version)
         self.assertEqual(run.EXPECTED_LITELLM_VERSION, dockerfile_version)
         self.assertIn("EXPECTED_SCHEMA_SHA256", (APP / "run.py").read_text())
         self.assertIn("platforms: linux/arm64", workflow)
@@ -158,7 +159,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("repos/$REPOSITORY/releases/tags/$VERSION", workflow)
         self.assertIn('"tag_name=$VERSION"', workflow)
         self.assertIn('"name=LiteLLM $VERSION"', workflow)
-        self.assertIn('test "$version" = "$litellm_version"', workflow)
+        self.assertIn('test "${app_version%-ha.*}" = "$litellm_version"', workflow)
         update_workflow = (ROOT / ".github/workflows/update-litellm.yaml").read_text()
         update_script = (ROOT / "scripts/update_litellm.py").read_text()
         self.assertIn('cron: "23 6 * * *"', update_workflow)
@@ -168,10 +169,16 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("schema_sha256=hashlib.sha256(schema).hexdigest()", update_script)
         self.assertFalse((APP / "build.yaml").exists())
 
-    def test_proxy_has_no_host_port_mapping_and_read_only_config_mount(self):
+    def test_proxy_publishes_web_ui_on_host_port_and_keeps_config_read_only(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())
-        self.assertIsNone(manifest["ports"]["4000/tcp"])
+        self.assertEqual(manifest["ports"]["4000/tcp"], 4000)
+        self.assertFalse(manifest.get("ingress", False))
         self.assertEqual(manifest["map"], [{"type": "addon_config", "read_only": True}])
+        self.assertIn("LAN", manifest["ports_description"]["4000/tcp"])
+
+    def test_web_ui_is_enabled_for_direct_lan_access(self):
+        entrypoint = (APP / "run.py").read_text()
+        self.assertIn('environment["DISABLE_ADMIN_UI"] = "False"', entrypoint)
 
     def test_database_and_master_key_are_required_secrets(self):
         manifest = yaml.safe_load((APP / "config.yaml").read_text())

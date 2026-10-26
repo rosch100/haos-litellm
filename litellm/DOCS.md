@@ -2,7 +2,7 @@
 
 ## App setup
 
-Install the repository `https://github.com/rosch100/haos-litellm` in Home Assistant **Settings → Apps → App store → ⋮ → Repositories**, then install `LiteLLM`. The app supports ARM64 (`aarch64`) only. Its API port has no host port mapping, and it does not publish a PostgreSQL port.
+Install the repository `https://github.com/rosch100/haos-litellm` in Home Assistant **Settings → Apps → App store → ⋮ → Repositories**, then install `LiteLLM`. The app supports ARM64 (`aarch64`) only. It publishes container port 4000 on Home Assistant host port 4000 for direct LAN access and does not publish a PostgreSQL port.
 
 The image runs LiteLLM `1.105.0` built from a pinned upstream source commit. Startup checks the installed package version and Prisma schema SHA-256 before any database connection. A missing or changed version/schema prevents database access.
 
@@ -28,7 +28,7 @@ Automatic startup will not migrate the schema. Apply required migrations deliber
 
 No tunnel software or network route is installed by this app. PostgreSQL must be reachable through the network routing configured by the Home Assistant host. Allow access only from appropriate application networks and keep the database off public interfaces.
 
-LiteLLM listens on container port 4000, but that port is not published on the host. To use the API from other networks or the Internet, configure a TLS-terminating reverse proxy or private network path separately. Preserve API authentication, validate health (`/health/liveliness`) and authenticated API behavior, and avoid exposing the admin interface or PostgreSQL publicly.
+LiteLLM listens on container port 4000, published as host port 4000. Open the web interface at `http://<HOME_ASSISTANT_LAN_IP>:4000/ui`; the LiteLLM API is available on the same host port. The Home Assistant host firewall and LAN segmentation control which devices can reach this port. Do not create router port-forwarding or otherwise expose it to the public Internet: the port includes the administrative web UI and API, and the UI does not provide TLS on its own. For access beyond a trusted LAN, use a separately secured TLS-terminating reverse proxy or private network path. The PostgreSQL port remains unpublished. Validate health (`/health/liveliness`) and authenticated API behavior.
 
 ## Health and diagnostics
 

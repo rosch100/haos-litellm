@@ -16,9 +16,9 @@ import litellm
 import yaml
 from litellm.proxy.db.prisma_client import should_update_prisma_schema
 
-EXPECTED_LITELLM_VERSION = "1.105.0"
+EXPECTED_LITELLM_VERSION = "1.106.4"
 EXPECTED_SCHEMA_SHA256 = (
-    "a17e69687d14d78dc7cee49770f1c1e8b2726cd8823d37c6dff48ae151533342"
+    "1ed6fbff070ed7cdf2fa86f667d7b6eedd6a0be2d7036250a54cfe360de183db"
 )
 OPTIONS_FILE = Path("/data/options.json")
 ENVIRONMENT_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -180,7 +180,7 @@ def main() -> None:
     environment = os.environ.copy()
     environment["DATABASE_URL"] = database_url
     environment["LITELLM_MASTER_KEY"] = master_key
-    environment["DISABLE_ADMIN_UI"] = "true"
+    environment["DISABLE_ADMIN_UI"] = "False"
     environment["STORE_MODEL_IN_DB"] = "true"
 
     salt_key = options.get("salt_key")
@@ -193,7 +193,7 @@ def main() -> None:
     wait_for_database(database_host, database_port)
     print(
         f"[LiteLLM HA app] Starting LiteLLM {EXPECTED_LITELLM_VERSION} against "
-        f"{database_host}:{database_port}; schema migrations disabled and Admin UI disabled",
+        f"{database_host}:{database_port}; schema migrations disabled and Admin UI enabled",
         flush=True,
     )
     os.execvpe(
