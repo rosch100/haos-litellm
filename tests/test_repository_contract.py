@@ -60,7 +60,8 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
         self.assertIn('target = "linux-musl-arm64-openssl-3.0.x"', dockerfile)
         self.assertIn(
-            'schema.replace(source, f"{source}, {target}")', dockerfile
+            'schema.replace(f"\\"{source}\\"", f"\\"{source}\\", \\"{target}\\"")',
+            dockerfile,
         )
         self.assertIn("from prisma import client", dockerfile)
         self.assertIn("from prisma.engine.utils import ensure", dockerfile)

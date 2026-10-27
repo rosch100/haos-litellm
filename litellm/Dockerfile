@@ -18,7 +18,6 @@ ENV LANG=C.UTF-8 \
 RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja libsndfile openssl
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
-    set -x && \
     python3 -m venv /opt/litellm-venv && \
     git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}" /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
@@ -32,7 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     mkdir -p "$prisma_cache_dir" && \
     rm -rf "$python_site_packages/prisma/binaries" && \
     ln -s "$prisma_cache_dir" "$python_site_packages/prisma/binaries" && \
-    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
+    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(f"\"{source}\"") == 1 and target not in schema; path.write_text(schema.replace(f"\"{source}\"", f"\"{source}\", \"{target}\""))' && \
     grep -Fq '"linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
     grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma && \
