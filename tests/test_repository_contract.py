@@ -51,13 +51,10 @@ class RepositoryContractTests(unittest.TestCase):
         dockerfile = (APP / "Dockerfile").read_text()
         workflow = (ROOT / ".github/workflows/build.yaml").read_text()
         self.assertEqual(manifest["image"], "ghcr.io/rosch100/haos-litellm-litellm")
-        self.assertIn(
-            "FROM ghcr.io/home-assistant/base-python:3.13-alpine3.24", dockerfile
+        self.assertRegex(
+            dockerfile,
+            r"FROM ghcr.io/home-assistant/base-python:3\.[0-9]+-alpine3\.24",
         )
-        self.assertIn(
-            "ln -s /opt/litellm-venv/bin/maturin /usr/local/bin/maturin", dockerfile
-        )
-        self.assertIn("cmake ninja", dockerfile)
         self.assertIn("libsndfile", dockerfile)
         self.assertIn("openssl", dockerfile)
         self.assertIn('source = "linux-musl-openssl-3.0.x"', dockerfile)
@@ -75,26 +72,19 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn(
             'git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}"', dockerfile
         )
-        self.assertIn("scikit-build-core", dockerfile)
         self.assertIn("type: addon_config", (APP / "config.yaml").read_text())
         self.assertIn(
-            "pip install maturin==1.15.0 numpy PyYAML scikit-build-core", dockerfile
-        )
-        self.assertIn(
-            'pip install --no-build-isolation "/tmp/litellm-source[proxy,extra_proxy]"',
+            'pip install --only-binary=litellm "litellm[proxy,extra_proxy]==${LITELLM_VERSION}"',
             dockerfile,
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
-            "rm -rf /opt/litellm-venv/lib/python3.13/site-packages/prisma/binaries",
+            'python_site_packages="$(python3 -c \'import sysconfig; print(sysconfig.get_path("purelib"))\')"',
             dockerfile,
         )
+        self.assertIn('"$python_site_packages/prisma/binaries"', dockerfile)
         self.assertIn(
             "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma", dockerfile
-        )
-        self.assertIn(
-            'sed -i "/pyroscope-io>=0.8.16,<1.0/d" /tmp/litellm-source/pyproject.toml',
-            dockerfile,
         )
         self.assertIn(
             'ENV IMAGE="ghcr.io/rosch100/haos-litellm-litellm:${BUILD_VERSION}"',
