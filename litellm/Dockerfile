@@ -19,10 +19,13 @@ RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers 
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     python3 -m venv /opt/litellm-venv && \
-    /opt/litellm-venv/bin/pip install --only-binary=litellm "litellm[proxy,extra_proxy]==${LITELLM_VERSION}" && \
     git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}" /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
     test "$(git -C /tmp/litellm-source describe --tags --exact-match "${LITELLM_SOURCE_COMMIT}")" = "${LITELLM_SOURCE_TAG}" && \
+    python3 -c 'import tomllib; from pathlib import Path; data = tomllib.loads(Path("/tmp/litellm-source/pyproject.toml").read_text()); dependencies = data["project"]["dependencies"] + data["project"]["optional-dependencies"]["proxy"] + data["project"]["optional-dependencies"]["extra_proxy"]; Path("/tmp/litellm-requirements.txt").write_text("\n".join(dependency for dependency in dependencies if not dependency.startswith("pyroscope-io")) + "\n")' && \
+    test -s /tmp/litellm-requirements.txt && \
+    ! grep -Fq "pyroscope-io" /tmp/litellm-requirements.txt && \
+    /opt/litellm-venv/bin/pip install --only-binary=litellm "litellm==${LITELLM_VERSION}" -r /tmp/litellm-requirements.txt && \
     prisma_cache_dir="$(python3 -c 'import os; print(os.environ["PRISMA_BINARY_CACHE_DIR"])')" && \
     python_site_packages="$(python3 -c 'import sysconfig; print(sysconfig.get_path("purelib"))')" && \
     mkdir -p "$prisma_cache_dir" && \
@@ -33,7 +36,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/python -c 'from prisma import client, config; config.binary_platform = "linux-musl-arm64-openssl-3.0.x"; from prisma.engine.utils import ensure; ensure(client.BINARY_PATHS.query_engine)' && \
-    rm -rf /tmp/litellm-source
+    rm -rf /tmp/litellm-source /tmp/litellm-requirements.txt
 
 COPY run.py /run.py
 COPY run.sh /run.sh
