@@ -91,7 +91,9 @@ class RepositoryContractTests(unittest.TestCase):
             'python_site_packages="$(python3 -c \'import sysconfig; print(sysconfig.get_path("purelib"))\')"',
             dockerfile,
         )
-        self.assertIn('"$python_site_packages/prisma/binaries"', dockerfile)
+        self.assertIn('"$python_site_packages"/prisma/binaries/*', dockerfile)
+        self.assertIn('*.py) ;;', dockerfile)
+        self.assertIn('mv "$binary" "$prisma_cache_dir/$binary_name"', dockerfile)
         self.assertIn(
             "prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma", dockerfile
         )
@@ -113,7 +115,7 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("if: github.event_name == 'push'", workflow)
         self.assertIn("actions/runs?branch=$PR_BRANCH&event=push&per_page=100", workflow)
         self.assertIn("if length == 0 then empty else last", workflow)
-        self.assertIn("timeout-minutes: 60", workflow)
+        self.assertIn("timeout-minutes: 65", workflow)
         self.assertIn("for _ in {1..330}; do", workflow)
         self.assertIn('      - "**"', workflow)
         self.assertIn('      - "scripts/**"', workflow.split("  push:", 1)[1])
