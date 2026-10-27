@@ -18,6 +18,7 @@ ENV LANG=C.UTF-8 \
 RUN apk add --no-cache git nodejs npm curl build-base python3-dev linux-headers cargo rust cmake ninja libsndfile openssl
 
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    set -x && \
     python3 -m venv /opt/litellm-venv && \
     git clone --filter=blob:none "${LITELLM_SOURCE_REPOSITORY}" /tmp/litellm-source && \
     git -C /tmp/litellm-source checkout --detach "${LITELLM_SOURCE_COMMIT}" && \
