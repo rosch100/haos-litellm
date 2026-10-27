@@ -74,8 +74,16 @@ class RepositoryContractTests(unittest.TestCase):
         )
         self.assertIn("type: addon_config", (APP / "config.yaml").read_text())
         self.assertIn(
-            'pip install --only-binary=litellm "litellm[proxy,extra_proxy]==${LITELLM_VERSION}"',
+            'pip install --only-binary=litellm "litellm==${LITELLM_VERSION}" -r /tmp/litellm-requirements.txt',
             dockerfile,
+        )
+        self.assertIn("import tomllib", dockerfile)
+        self.assertIn('"optional-dependencies"]["proxy"]', dockerfile)
+        self.assertIn('"optional-dependencies"]["extra_proxy"]', dockerfile)
+        self.assertIn('not dependency.startswith("pyroscope-io")', dockerfile)
+        self.assertIn("test -s /tmp/litellm-requirements.txt", dockerfile)
+        self.assertIn(
+            '! grep -Fq "pyroscope-io" /tmp/litellm-requirements.txt', dockerfile
         )
         self.assertIn("PRISMA_BINARY_CACHE_DIR=/opt/litellm-prisma", dockerfile)
         self.assertIn(
