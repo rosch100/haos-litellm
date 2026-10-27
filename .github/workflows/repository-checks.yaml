@@ -39,6 +39,7 @@ jobs:
   validate-repository:
     name: Validate Home Assistant repository metadata
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -73,6 +74,7 @@ jobs:
   lint-workflows:
     name: Check GitHub Actions workflow syntax
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -88,6 +90,7 @@ jobs:
   lint-dockerfile:
     name: Lint Home Assistant Dockerfile
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -101,6 +104,7 @@ jobs:
   lint-shell-scripts:
     name: Lint Home Assistant shell scripts
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

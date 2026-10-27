@@ -16,6 +16,7 @@ jobs:
   update:
     if: github.repository == 'rosch100/haos-litellm'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write
