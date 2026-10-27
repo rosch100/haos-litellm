@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     mkdir -p "$prisma_cache_dir" && \
     rm -rf "$python_site_packages/prisma/binaries" && \
     ln -s "$prisma_cache_dir" "$python_site_packages/prisma/binaries" && \
-    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(source) == 1 and target not in schema; path.write_text(schema.replace(source, f"{source}, {target}"))' && \
+    python3 -c 'from pathlib import Path; path = Path("/tmp/litellm-source/litellm/proxy/schema.prisma"); schema = path.read_text(); source = "linux-musl-openssl-3.0.x"; target = "linux-musl-arm64-openssl-3.0.x"; assert schema.count(f"\"{source}\"") == 1 and target not in schema; path.write_text(schema.replace(f"\"{source}\"", f"\"{source}\", \"{target}\""))' && \
     grep -Fq '"linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
     grep -Fq '"linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"' /tmp/litellm-source/litellm/proxy/schema.prisma && \
     /opt/litellm-venv/bin/prisma generate --schema=/tmp/litellm-source/litellm/proxy/schema.prisma && \
