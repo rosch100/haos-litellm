@@ -39,6 +39,7 @@ jobs:
     name: Validate Home Assistant app contract
     if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -62,6 +63,7 @@ jobs:
     name: Build ARM64 image once on branch
     if: github.event_name == 'push' && github.ref != 'refs/heads/main' && github.repository == 'rosch100/haos-litellm'
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
     needs: validate
     permissions:
       contents: read
@@ -125,6 +127,7 @@ jobs:
     name: Build ARM64 image for fork pull request
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
     needs: validate
     steps:
       - name: Check out pull request source
@@ -155,9 +158,9 @@ jobs:
     name: Verify successful branch image build
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 65
     permissions:
       actions: read
-    timeout-minutes: 60
     steps:
       - name: Wait for the matching branch image build
         env:
@@ -192,6 +195,7 @@ jobs:
     name: Promote branch image on main without rebuilding
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'rosch100/haos-litellm'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       promoted: ${{ steps.source.outputs.promoted }}
     permissions:
@@ -335,6 +339,7 @@ jobs:
     if: needs.promote.outputs.promoted == 'true'
     needs: promote
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
